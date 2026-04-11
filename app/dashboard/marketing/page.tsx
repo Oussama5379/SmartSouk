@@ -1,622 +1,801 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { products } from "@/lib/mock-data"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Spinner } from "@/components/ui/spinner"
-import { Badge } from "@/components/ui/badge"
-import { Copy, Instagram, Lightbulb, Image, Hash, Clock, Check, Sparkles, Loader2, RotateCw } from "lucide-react"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
+import { Copy, Check, Sparkles, Image as ImageIcon } from "lucide-react";
 
-interface CampaignResult {
-  instagram_caption: string
-  hashtags: string[]
-  image_prompt: string
-  strategy_tip: string
+// ─── TYPES ────────────────────────────────────────────────────────────────────
+interface Article {
+  id: string;
+  title: string;
+  summary: string;
 }
 
-interface ContentVariant {
-  tone: string
-  copy: string
-  hashtags: string
-  cta: string
-  bestTime: string
-  seoKeywords: string
+interface OverlayConfig {
+  labelText: string;
+  taglineText: string;
+  style: string;
+  position: string;
+  textAlign: string;
+  textColor: string;
+  taglineColor: string;
+  bgColor: string;
+  borderColor: string;
+  opacity: number;
+  overlayBlur: number;
+  bgBlur: number;
+  fontSize: number;
+  letterSpacing: number;
+  padding: number;
+  borderWidth: number;
+  borderRadius: number;
+  showOverlay: boolean;
+  showTagline: boolean;
+  uppercase: boolean;
+  showBorder: boolean;
+  textShadow: boolean;
 }
 
+interface CaptionItem {
+  tone: string;
+  caption: string;
+  hashtags: string;
+}
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const STYLE_PRESETS: Record<string, Partial<OverlayConfig>> = {
+  luxury: {
+    textColor: "#ffffff", taglineColor: "#e8d5b0",
+    bgColor: "#1a1008", borderColor: "#b98b2e",
+    opacity: 88, overlayBlur: 0,
+    borderWidth: 2, borderRadius: 5,
+    fontSize: 18, letterSpacing: 3, padding: 12,
+    uppercase: true, showBorder: true, textShadow: false,
+    position: "center", textAlign: "center",
+  },
+  minimal: {
+    textColor: "#1a1a1a", taglineColor: "#666666",
+    bgColor: "#ffffff", borderColor: "#dddddd",
+    opacity: 92, overlayBlur: 0,
+    borderWidth: 1, borderRadius: 6,
+    fontSize: 15, letterSpacing: 1, padding: 10,
+    uppercase: false, showBorder: true, textShadow: false,
+    position: "bottom-center", textAlign: "center",
+  },
+  frosted: {
+    textColor: "#ffffff", taglineColor: "#ddeeff",
+    bgColor: "#ffffff", borderColor: "#ffffff",
+    opacity: 18, overlayBlur: 20,
+    borderWidth: 1, borderRadius: 16,
+    fontSize: 18, letterSpacing: 2, padding: 18,
+    uppercase: false, showBorder: true, textShadow: true,
+    position: "center", textAlign: "center",
+  },
+  bold: {
+    textColor: "#ffffff", taglineColor: "#ffe0a0",
+    bgColor: "#c45d1b", borderColor: "#c45d1b",
+    opacity: 95, overlayBlur: 0,
+    borderWidth: 0, borderRadius: 4,
+    fontSize: 20, letterSpacing: 2, padding: 14,
+    uppercase: true, showBorder: false, textShadow: false,
+    position: "bottom-center", textAlign: "center",
+  },
+  cinematic: {
+    textColor: "#ffffff", taglineColor: "#999999",
+    bgColor: "#000000", borderColor: "#000000",
+    opacity: 72, overlayBlur: 0,
+    borderWidth: 0, borderRadius: 0,
+    fontSize: 22, letterSpacing: 5, padding: 20,
+    uppercase: true, showBorder: false, textShadow: false,
+    position: "bottom-center", textAlign: "left",
+  },
+  outline: {
+    textColor: "#ffffff", taglineColor: "#ffffff",
+    bgColor: "#000000", borderColor: "#ffffff",
+    opacity: 0, overlayBlur: 0,
+    borderWidth: 2, borderRadius: 0,
+    fontSize: 18, letterSpacing: 4, padding: 12,
+    uppercase: true, showBorder: true, textShadow: true,
+    position: "center", textAlign: "center",
+  },
+};
+
+const POSITIONS: Record<string, React.CSSProperties> = {
+  center: { top: "50%", left: "50%", transform: "translate(-50%,-50%)" },
+  "top-center": { top: "6%", left: "50%", transform: "translateX(-50%)" },
+  "top-left": { top: "6%", left: "5%" },
+  "top-right": { top: "6%", right: "5%" },
+  "bottom-center": { bottom: "6%", left: "50%", transform: "translateX(-50%)" },
+  "bottom-left": { bottom: "6%", left: "5%" },
+  "bottom-right": { bottom: "6%", right: "5%" },
+};
+
+const DEFAULT_ARTICLES: Article[] = [
+  { id: "a1", title: "New Product Launch Spotlight", summary: "Show the hero product with premium lighting, clean backdrop, and a high-end campaign feel." },
+  { id: "a2", title: "Limited-Time Offer Campaign", summary: "Focus on urgency, bold hero composition, and a visual that clearly sells the main offer." },
+  { id: "a3", title: "Brand Story Hero Visual", summary: "Highlight craftsmanship, material quality, and a premium brand mood for social media." },
+];
+
+const DEFAULT_OVERLAY: OverlayConfig = {
+  labelText: "Campaign Label", taglineText: "",
+  style: "luxury", position: "center", textAlign: "center",
+  textColor: "#ffffff", taglineColor: "#e8d5b0",
+  bgColor: "#1a1008", borderColor: "#b98b2e",
+  opacity: 88, overlayBlur: 0, bgBlur: 0,
+  fontSize: 18, letterSpacing: 3, padding: 12,
+  borderWidth: 2, borderRadius: 5,
+  showOverlay: true, showTagline: true,
+  uppercase: true, showBorder: true, textShadow: false,
+};
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function hexToRgb(hex: string) {
+  return {
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  };
+}
+
+function computeOverlayStyle(cfg: OverlayConfig, imageLoaded: boolean): React.CSSProperties {
+  if (!imageLoaded || !cfg.showOverlay) return { display: "none" };
+
+  const isCinematic = cfg.style === "cinematic";
+  const { r, g, b } = hexToRgb(cfg.bgColor);
+  const blur = cfg.overlayBlur > 0 ? `blur(${cfg.overlayBlur}px)` : "none";
+  const posStyles = isCinematic
+    ? { bottom: "0", left: "0", right: "0", top: "auto", width: "100%", maxWidth: "100%" }
+    : { ...(POSITIONS[cfg.position] || POSITIONS.center), minWidth: "40%", maxWidth: "74%" };
+
+  return {
+    position: "absolute",
+    display: "block",
+    background: `rgba(${r},${g},${b},${cfg.opacity / 100})`,
+    backdropFilter: blur,
+    WebkitBackdropFilter: blur,
+    border: cfg.showBorder && cfg.borderWidth > 0 && !isCinematic
+      ? `${cfg.borderWidth}px solid ${cfg.borderColor}`
+      : "none",
+    borderRadius: isCinematic ? "0" : `${cfg.borderRadius}px`,
+    fontSize: `${cfg.fontSize}px`,
+    letterSpacing: `${cfg.letterSpacing}px`,
+    textTransform: cfg.uppercase ? "uppercase" : "none",
+    textAlign: cfg.textAlign as React.CSSProperties["textAlign"],
+    padding: `${cfg.padding}px ${Math.round(cfg.padding * 1.6)}px`,
+    wordBreak: "break-word",
+    ...posStyles,
+  };
+}
+
+// ─── COPY BUTTON ──────────────────────────────────────────────────────────────
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        });
+      }}
+      className="flex items-center gap-1.5 text-xs font-semibold border border-border rounded-md px-2.5 py-1 hover:border-primary hover:text-primary transition-colors"
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
+// ─── SLIDER ROW ───────────────────────────────────────────────────────────────
+function SliderRow({
+  label, value, min, max, unit = "px",
+  onChange,
+}: {
+  label: string; value: number; min: number; max: number; unit?: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs font-semibold text-muted-foreground w-28 shrink-0">{label}</span>
+      <Slider
+        min={min} max={max} step={1}
+        value={[value]}
+        onValueChange={([v]) => onChange(v)}
+        className="flex-1"
+      />
+      <span className="text-xs font-bold text-primary w-9 text-right shrink-0">{value}{unit}</span>
+    </div>
+  );
+}
+
+// ─── COLOR ROW ────────────────────────────────────────────────────────────────
+function ColorRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-lg px-3 py-2">
+      <span className="text-xs font-semibold flex-1">{label}</span>
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-8 h-7 rounded border border-border cursor-pointer bg-background p-0.5"
+      />
+    </div>
+  );
+}
+
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function MarketingPage() {
-  const [selectedProduct, setSelectedProduct] = useState<string>("")
-  const [campaignGoal, setCampaignGoal] = useState<string>("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [result, setResult] = useState<CampaignResult | null>(null)
-  const [copiedField, setCopiedField] = useState<string | null>(null)
-  const [showVariants, setShowVariants] = useState(false)
-  const [contentVariants, setContentVariants] = useState<ContentVariant[]>([])
-  const [loadingVariants, setLoadingVariants] = useState(false)
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string>("")
-  const [generatingImage, setGeneratingImage] = useState(false)
+  // Brand profile
+  const [brandName, setBrandName] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [visualStyle, setVisualStyle] = useState("");
+  const [audience, setAudience] = useState("");
 
-  const handleGenerate = async () => {
-    if (!selectedProduct || !campaignGoal) return
+  // Articles
+  const [articles, setArticles] = useState<Article[]>(DEFAULT_ARTICLES);
+  const [selectedId, setSelectedId] = useState("a1");
+  const [newTitle, setNewTitle] = useState("");
+  const [newSummary, setNewSummary] = useState("");
 
-    setIsLoading(true)
-    setResult(null)
+  // Generation state
+  const [roughPrompt, setRoughPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [status, setStatus] = useState("Ready.");
+  const [statusTone, setStatusTone] = useState<"normal" | "ok" | "error">("normal");
+  const [enhancedPrompt, setEnhancedPrompt] = useState("");
+  const [provider, setProvider] = useState("pending");
+  const [lastGeneratedPrompt, setLastGeneratedPrompt] = useState("");
+
+  // Image
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const lastObjectUrl = useRef<string | null>(null);
+
+  // Overlay
+  const [cfg, setCfg] = useState<OverlayConfig>(DEFAULT_OVERLAY);
+
+  // Captions
+  const [captionTone, setCaptionTone] = useState("all");
+  const [captionPlatform, setCaptionPlatform] = useState("instagram");
+  const [captions, setCaptions] = useState<CaptionItem[]>([]);
+  const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
+  const [captionError, setCaptionError] = useState("");
+
+  const updateCfg = useCallback((patch: Partial<OverlayConfig>) => {
+    setCfg((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const applyPreset = useCallback((presetName: string) => {
+    const p = STYLE_PRESETS[presetName];
+    if (!p) return;
+    setCfg((prev) => ({ ...prev, ...p, style: presetName }));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (lastObjectUrl.current) URL.revokeObjectURL(lastObjectUrl.current);
+    };
+  }, []);
+
+  const selectedArticle = articles.find((a) => a.id === selectedId) || articles[0];
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    if (isGenerating || !roughPrompt.trim()) return;
+
+    setIsGenerating(true);
+    setStatus("Building prompt…");
+    setStatusTone("normal");
+    setProvider("processing");
 
     try {
-      const product = products.find((p) => p.id === selectedProduct)
-      const response = await fetch("/api/marketing", {
+      // Step 1: build prompt from inputs (no LLM middleware)
+      const enhanceRes = await fetch("/api/enhance-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          product,
-          goal: campaignGoal,
+          roughPrompt,
+          article: selectedArticle,
+          profile: { brandName, industry, visualStyle, audience },
         }),
-      })
+      });
+      const enhanceData = await enhanceRes.json();
+      const finalPrompt = (enhanceData.prompt || "").trim();
+      if (!finalPrompt) throw new Error("No prompt returned.");
 
-      const data = await response.json()
-      setResult(data)
-    } catch (error) {
-      console.error("[v0] Marketing API error:", error)
+      setEnhancedPrompt(finalPrompt);
+      setLastGeneratedPrompt(finalPrompt);
+      setProvider(enhanceData.provider || "local");
+
+      // Step 2: generate image
+      setStatus("Generating image…");
+      const imgRes = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: finalPrompt }),
+      });
+
+      if (!imgRes.ok) {
+        const errData = await imgRes.json().catch(() => ({}));
+        throw new Error((errData.error || "Image generation failed.") + (errData.details ? ` ${errData.details}` : ""));
+      }
+
+      const blob = await imgRes.blob();
+      if (!blob || !blob.size) throw new Error("Image response was empty.");
+
+      if (lastObjectUrl.current) URL.revokeObjectURL(lastObjectUrl.current);
+      const objUrl = URL.createObjectURL(blob);
+      lastObjectUrl.current = objUrl;
+      setImageUrl(objUrl);
+      setImageLoaded(false);
+      setStatus("Image ready.");
+      setStatusTone("ok");
+    } catch (err) {
+      setStatus((err as Error).message || "Something went wrong.");
+      setStatusTone("error");
     } finally {
-      setIsLoading(false)
+      setIsGenerating(false);
     }
   }
 
-  const copyToClipboard = async (text: string, field: string) => {
-    await navigator.clipboard.writeText(text)
-    setCopiedField(field)
-    setTimeout(() => setCopiedField(null), 2000)
+  function handleAddArticle(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newTitle.trim() || !newSummary.trim()) return;
+    const article = { id: `a${Date.now()}`, title: newTitle.trim(), summary: newSummary.trim() };
+    setArticles((prev) => [article, ...prev]);
+    setSelectedId(article.id);
+    setNewTitle("");
+    setNewSummary("");
   }
 
-  const generateContentVariants = async () => {
-    if (!selectedProduct || !campaignGoal) return
+  async function handleGenerateCaption() {
+    if (isGeneratingCaption) return;
+    setIsGeneratingCaption(true);
+    setCaptions([]);
+    setCaptionError("");
 
-    setLoadingVariants(true)
     try {
-      const product = products.find((p) => p.id === selectedProduct)
-      const response = await fetch("/api/content-variants", {
+      const res = await fetch("/api/generate-captions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          product: product?.name,
-          audience: "E-commerce customers",
-          campaignGoal,
+          article: selectedArticle,
+          profile: { brandName, industry, visualStyle, audience },
+          tone: captionTone,
+          platform: captionPlatform,
+          imagePrompt: lastGeneratedPrompt,
         }),
-      })
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ""
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          fullText += decoder.decode(value, { stream: true })
-        }
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Caption generation failed.");
       }
-
-      try {
-        // Parse JSON from the response
-        const jsonMatch = fullText.match(/\[[\s\S]*\]/)
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
-          setContentVariants(parsed)
-          setShowVariants(true)
-        }
-      } catch (e) {
-        console.error("[v0] Failed to parse variants:", e)
-      }
-    } catch (error) {
-      console.error("[v0] Variants API error:", error)
+      const data = await res.json();
+      setCaptions(Array.isArray(data.captions) ? data.captions : []);
+    } catch (err) {
+      setCaptionError((err as Error).message || "Caption generation failed.");
     } finally {
-      setLoadingVariants(false)
+      setIsGeneratingCaption(false);
     }
   }
 
-  const generateProductImage = async () => {
-    if (!result) return
+  const overlayStyle = computeOverlayStyle(cfg, imageLoaded);
+  const shadow = cfg.textShadow
+    ? "0 2px 10px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.5)"
+    : "none";
 
-    setGeneratingImage(true)
-    try {
-      const response = await fetch("/api/generate-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product: products.find((p) => p.id === selectedProduct)?.name,
-          prompt: result.image_prompt,
-        }),
-      })
-
-      const data = await response.json()
-      if (data.imageUrl) {
-        setGeneratedImageUrl(data.imageUrl)
-      }
-    } catch (error) {
-      console.error("[v0] Image generation error:", error)
-    } finally {
-      setGeneratingImage(false)
-    }
-  }
+  const statusColor =
+    statusTone === "error"
+      ? "text-destructive"
+      : statusTone === "ok"
+      ? "text-green-700 dark:text-green-400"
+      : "text-foreground";
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
+    <div className="space-y-6">
+      {/* Dashboard header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Marketing AI Assistant</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Marketing AI</h1>
         <p className="text-muted-foreground">
-          Generate compelling social media campaigns for your products using AI.
+          Generate campaign visuals and social media captions with AI.
         </p>
       </div>
 
+      {/* Top grid: Brand + Prompt */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Input Form */}
+
+        {/* Panel 1: Brand Profile + Articles */}
         <Card>
-          <CardHeader>
-            <CardTitle>Campaign Generator</CardTitle>
-            <CardDescription>
-              Select a product and describe your campaign goal to generate marketing content.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="product">Product to Promote</Label>
-              <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                <SelectTrigger id="product">
-                  <SelectValue placeholder="Select a product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      <div className="flex items-center gap-2">
-                        <span>{product.name}</span>
-                        <span className="text-muted-foreground">- {product.price_tnd} TND</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="goal">Campaign Goal</Label>
-              <Input
-                id="goal"
-                placeholder="e.g., Mother's Day flash sale, Ramadan promotion..."
-                value={campaignGoal}
-                onChange={(e) => setCampaignGoal(e.target.value)}
-              />
-            </div>
-
-            <Button
-              onClick={handleGenerate}
-              disabled={!selectedProduct || !campaignGoal || isLoading}
-              className="w-full"
-              size="lg"
-            >
-              {isLoading ? (
-                <>
-                  <Spinner className="mr-2" />
-                  Generating Campaign...
-                </>
-              ) : (
-                "Generate Campaign"
-              )}
-            </Button>
-
-            {/* Quick Suggestions */}
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Quick suggestions:</p>
-              <div className="flex flex-wrap gap-2">
-                {["Mother's Day Sale", "Ramadan Special", "Summer Collection", "New Arrival"].map(
-                  (suggestion) => (
-                    <Badge
-                      key={suggestion}
-                      variant="outline"
-                      className="cursor-pointer hover:bg-accent"
-                      onClick={() => setCampaignGoal(suggestion)}
-                    >
-                      {suggestion}
-                    </Badge>
-                  )
-                )}
+          <CardContent className="p-6 space-y-6">
+            <div>
+              <h2 className="font-semibold text-lg mb-4">1. Brand Profile</h2>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Brand name</Label>
+                  <Input placeholder="Your brand" value={brandName} onChange={(e) => setBrandName(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Category / Industry</Label>
+                  <Input placeholder="perfume, fashion, tech, skincare…" value={industry} onChange={(e) => setIndustry(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Visual style</Label>
+                  <Input placeholder="minimalist luxury, dark cinematic…" value={visualStyle} onChange={(e) => setVisualStyle(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Audience</Label>
+                  <Input placeholder="Target audience" value={audience} onChange={(e) => setAudience(e.target.value)} />
+                </div>
               </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h2 className="font-semibold text-lg mb-3">2. Campaign Angle</h2>
+              <div className="space-y-2 mb-4">
+                {articles.map((a) => (
+                  <label
+                    key={a.id}
+                    className={`block border rounded-lg p-3 cursor-pointer transition-colors ${
+                      a.id === selectedId
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="radio"
+                        name="articleChoice"
+                        value={a.id}
+                        checked={a.id === selectedId}
+                        onChange={() => setSelectedId(a.id)}
+                        className="mt-0.5 accent-primary"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold">{a.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{a.summary}</p>
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <form onSubmit={handleAddArticle} className="space-y-2 pt-3 border-t border-dashed">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Add custom angle</p>
+                <Input
+                  placeholder="Campaign title"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  required
+                />
+                <Textarea
+                  rows={2}
+                  placeholder="Short campaign angle or summary"
+                  value={newSummary}
+                  onChange={(e) => setNewSummary(e.target.value)}
+                  required
+                />
+                <Button type="submit" variant="outline" size="sm" className="w-full">
+                  Add Angle
+                </Button>
+              </form>
             </div>
           </CardContent>
         </Card>
 
-        {/* Results Panel */}
-        <div className="space-y-4">
-          {!result && !isLoading && (
-            <Card className="flex h-full min-h-[400px] items-center justify-center">
-              <CardContent className="text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                  <Lightbulb className="h-8 w-8 text-muted-foreground" />
+        {/* Panel 2: Prompt Input */}
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <h2 className="font-semibold text-lg">3. Prompt &amp; Generate</h2>
+            <form onSubmit={handleGenerate} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Describe the visual</Label>
+                <Textarea
+                  rows={5}
+                  placeholder="Example: product bottle hero shot, dark amber lighting, clean studio background, minimalist feel"
+                  value={roughPrompt}
+                  onChange={(e) => setRoughPrompt(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={isGenerating} className="w-full">
+                <Sparkles className="mr-2 h-4 w-4" />
+                {isGenerating ? "Generating…" : "Generate Image"}
+              </Button>
+            </form>
+
+            <Separator />
+
+            <div className="space-y-1">
+              <p className={`text-sm font-semibold ${statusColor}`}>{status}</p>
+              <p className="text-xs text-muted-foreground">
+                Provider:{" "}
+                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-semibold">
+                  {provider}
+                </span>
+              </p>
+            </div>
+
+            {enhancedPrompt && (
+              <div className="space-y-1.5 pt-2 border-t border-dashed">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Prompt sent to FLUX</p>
+                <p className="text-sm text-foreground leading-relaxed">{enhancedPrompt}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Panel 3: Result + Overlay Studio */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-baseline justify-between gap-4 mb-6 flex-wrap">
+            <h2 className="font-semibold text-lg">4. Result &amp; Overlay Studio</h2>
+            <p className="text-xs text-muted-foreground">Labels render in HTML/CSS — always crisp, never burned into the image.</p>
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-[1fr_1.3fr] items-start">
+            {/* Image column */}
+            <div className="lg:sticky lg:top-20">
+              <div className="relative border border-border rounded-xl overflow-hidden bg-muted aspect-square">
+                {!imageLoaded && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground/50">
+                    <ImageIcon className="h-10 w-10" />
+                    <p className="text-sm">Generate an image to begin</p>
+                  </div>
+                )}
+                {imageUrl && (
+                  <img
+                    src={imageUrl}
+                    alt="Generated campaign visual"
+                    className="w-full h-full object-cover transition-all duration-300"
+                    style={{ filter: `blur(${cfg.bgBlur}px)`, display: imageLoaded ? "block" : "none" }}
+                    onLoad={() => setImageLoaded(true)}
+                  />
+                )}
+                {/* Overlay */}
+                <div style={overlayStyle}>
+                  <div style={{ fontWeight: 700, lineHeight: 1.15, color: cfg.textColor, textShadow: shadow }}>
+                    {cfg.labelText || "Campaign Label"}
+                  </div>
+                  {cfg.showTagline && cfg.taglineText && (
+                    <div style={{ fontWeight: 500, fontSize: "0.68em", marginTop: 5, lineHeight: 1.35, color: cfg.taglineColor, textShadow: shadow }}>
+                      {cfg.taglineText}
+                    </div>
+                  )}
                 </div>
-                <h3 className="text-lg font-semibold">Ready to Create</h3>
-                <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                  Select a product and enter your campaign goal to generate AI-powered marketing
-                  content.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Tip: use Image blur for a soft focus editorial look.</p>
+            </div>
 
-          {isLoading && (
-            <Card className="flex h-full min-h-[400px] items-center justify-center">
-              <CardContent className="text-center">
-                <Spinner className="mx-auto mb-4 h-8 w-8" />
-                <h3 className="text-lg font-semibold">Crafting Your Campaign</h3>
-                <p className="text-sm text-muted-foreground">
-                  Our AI is creating compelling content for you...
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {result && (
-            <div className="space-y-4">
-              {/* Instagram Caption */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <Instagram className="h-5 w-5 text-pink-500" />
-                    <CardTitle className="text-base">Instagram Caption (Default)</CardTitle>
+            {/* Studio controls */}
+            <div className="space-y-5">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Text Content</p>
+                <div className="space-y-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Main headline</Label>
+                    <Input value={cfg.labelText} onChange={(e) => updateCfg({ labelText: e.target.value })} placeholder="Main text" />
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="whitespace-pre-wrap text-sm">{result.instagram_caption}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => copyToClipboard(result.instagram_caption, "caption")}
-                  >
-                    {copiedField === "caption" ? (
-                      <Check className="mr-2 h-4 w-4" />
-                    ) : (
-                      <Copy className="mr-2 h-4 w-4" />
-                    )}
-                    {copiedField === "caption" ? "Copied!" : "Copy"}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Caption Tone Variants */}
-              <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-transparent">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-purple-600" />
-                    Caption Tone Variants
-                  </CardTitle>
-                  <CardDescription>3 versions optimized for different audiences</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Professional Tone */}
-                  <div className="p-4 rounded-lg border bg-white">
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge className="bg-blue-600">Professional</Badge>
-                      <span className="text-xs text-muted-foreground">Corporate, B2B</span>
-                    </div>
-                    <p className="text-sm mb-3">
-                      Discover authentic Tunisian craftsmanship. Our {products.find((p) => p.id === selectedProduct)?.name} represents generations of artisanal excellence. Premium quality, sustainable practices. Perfect for discerning customers who value heritage and authenticity.
-                    </p>
-                    <div className="text-xs text-muted-foreground mb-2">
-                      <strong>CTA:</strong> Shop now for authentic heritage pieces
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        copyToClipboard(
-                          `Discover authentic Tunisian craftsmanship. Our ${products.find((p) => p.id === selectedProduct)?.name} represents generations of artisanal excellence. Premium quality, sustainable practices. Perfect for discerning customers who value heritage and authenticity. Shop now for authentic heritage pieces`,
-                          "prof-caption"
-                        )
-                      }
-                    >
-                      {copiedField === "prof-caption" ? (
-                        <Check className="mr-2 h-4 w-4" />
-                      ) : (
-                        <Copy className="mr-2 h-4 w-4" />
-                      )}
-                      {copiedField === "prof-caption" ? "Copied!" : "Copy"}
-                    </Button>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Tagline / sub-copy</Label>
+                    <Input value={cfg.taglineText} onChange={(e) => updateCfg({ taglineText: e.target.value })} placeholder="Optional tagline" />
                   </div>
-
-                  {/* Fun/Casual Tone */}
-                  <div className="p-4 rounded-lg border bg-white">
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge className="bg-orange-600">Fun & Casual</Badge>
-                      <span className="text-xs text-muted-foreground">Instagram, TikTok</span>
-                    </div>
-                    <p className="text-sm mb-3">
-                      ✨ Your vibe called and this {products.find((p) => p.id === selectedProduct)?.name} answered! Handmade with love by Tunisian artisans who've perfected their craft over generations. Add some soul to your space—because mass-produced is so last season. 🌍💫
-                    </p>
-                    <div className="text-xs text-muted-foreground mb-2">
-                      <strong>CTA:</strong> Get yours before they're gone 🔥
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        copyToClipboard(
-                          `✨ Your vibe called and this ${products.find((p) => p.id === selectedProduct)?.name} answered! Handmade with love by Tunisian artisans who've perfected their craft over generations. Add some soul to your space—because mass-produced is so last season. 🌍💫 Get yours before they're gone 🔥`,
-                          "fun-caption"
-                        )
-                      }
-                    >
-                      {copiedField === "fun-caption" ? (
-                        <Check className="mr-2 h-4 w-4" />
-                      ) : (
-                        <Copy className="mr-2 h-4 w-4" />
-                      )}
-                      {copiedField === "fun-caption" ? "Copied!" : "Copy"}
-                    </Button>
-                  </div>
-
-                  {/* Storytelling Tone */}
-                  <div className="p-4 rounded-lg border bg-white">
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge className="bg-rose-600">Storytelling</Badge>
-                      <span className="text-xs text-muted-foreground">Emotional connection</span>
-                    </div>
-                    <p className="text-sm mb-3">
-                      Meet {products.find((p) => p.id === selectedProduct)?.name}—each one tells a story. Handcrafted by artisans in the heart of Tunisia, carrying forward traditions that have survived centuries. When you choose this piece, you're not just buying something beautiful. You're supporting families, preserving culture, and bringing authentic heritage into your home. Every detail matters. Every stitch counts.
-                    </p>
-                    <div className="text-xs text-muted-foreground mb-2">
-                      <strong>CTA:</strong> Be part of the story. Own a piece of Tunisia.
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        copyToClipboard(
-                          `Meet ${products.find((p) => p.id === selectedProduct)?.name}—each one tells a story. Handcrafted by artisans in the heart of Tunisia, carrying forward traditions that have survived centuries. When you choose this piece, you're not just buying something beautiful. You're supporting families, preserving culture, and bringing authentic heritage into your home. Every detail matters. Every stitch counts. Be part of the story. Own a piece of Tunisia.`,
-                          "story-caption"
-                        )
-                      }
-                    >
-                      {copiedField === "story-caption" ? (
-                        <Check className="mr-2 h-4 w-4" />
-                      ) : (
-                        <Copy className="mr-2 h-4 w-4" />
-                      )}
-                      {copiedField === "story-caption" ? "Copied!" : "Copy"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Hashtags & Best Time to Post */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center gap-2">
-                      <Hash className="h-5 w-5 text-blue-500" />
-                      <CardTitle className="text-base">Hashtags</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {result.hashtags.map((tag, i) => (
-                        <Badge key={i} variant="secondary">
-                          {tag.startsWith("#") ? tag : `#${tag}`}
-                        </Badge>
-                      ))}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => copyToClipboard(result.hashtags.join(" "), "hashtags")}
-                    >
-                      {copiedField === "hashtags" ? (
-                        <Check className="mr-2 h-4 w-4" />
-                      ) : (
-                        <Copy className="mr-2 h-4 w-4" />
-                      )}
-                      {copiedField === "hashtags" ? "Copied!" : "Copy All"}
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-transparent">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-5 w-5 text-amber-600" />
-                      <CardTitle className="text-base">Best Time to Post</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="p-3 bg-white rounded border">
-                      <p className="text-sm font-semibold text-amber-900">Thursday 7-9 PM</p>
-                      <p className="text-xs text-muted-foreground mt-1">Highest engagement for Tunisian diaspora</p>
-                    </div>
-                    <div className="p-3 bg-white rounded border">
-                      <p className="text-sm font-semibold text-amber-900">Friday 6-8 PM</p>
-                      <p className="text-xs text-muted-foreground mt-1">Weekend browsing peak time</p>
-                    </div>
-                    <div className="p-3 bg-white rounded border">
-                      <p className="text-sm font-semibold text-amber-900">Tuesday 2-4 PM</p>
-                      <p className="text-xs text-muted-foreground mt-1">Business buyer activity high</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                </div>
               </div>
 
-              {/* Image Prompt & Generated Image */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Image className="h-5 w-5 text-purple-500" />
-                      <CardTitle className="text-base">AI Image Generation</CardTitle>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={generateProductImage}
-                      disabled={generatingImage}
-                    >
-                      {generatingImage ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="mr-2 h-4 w-4" />
-                          Generate Image
-                        </>
-                      )}
-                    </Button>
+              <Separator />
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Style Preset &amp; Layout</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Preset</Label>
+                    <Select value={cfg.style} onValueChange={(v) => applyPreset(v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="luxury">Luxury Dark</SelectItem>
+                        <SelectItem value="minimal">Minimal Clean</SelectItem>
+                        <SelectItem value="frosted">Frosted Glass</SelectItem>
+                        <SelectItem value="bold">Bold Block</SelectItem>
+                        <SelectItem value="cinematic">Cinematic Bar</SelectItem>
+                        <SelectItem value="outline">Outline Only</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {generatedImageUrl ? (
-                    <div className="space-y-3">
-                      <img
-                        src={generatedImageUrl}
-                        alt="Generated product image"
-                        className="w-full rounded-lg border"
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Position</Label>
+                    <Select value={cfg.position} onValueChange={(v) => updateCfg({ position: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="center">Center</SelectItem>
+                        <SelectItem value="top-center">Top Center</SelectItem>
+                        <SelectItem value="bottom-center">Bottom Center</SelectItem>
+                        <SelectItem value="top-left">Top Left</SelectItem>
+                        <SelectItem value="top-right">Top Right</SelectItem>
+                        <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                        <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Text align</Label>
+                    <Select value={cfg.textAlign} onValueChange={(v) => updateCfg({ textAlign: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="center">Center</SelectItem>
+                        <SelectItem value="left">Left</SelectItem>
+                        <SelectItem value="right">Right</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Colors</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <ColorRow label="Headline" value={cfg.textColor} onChange={(v) => updateCfg({ textColor: v })} />
+                  <ColorRow label="Tagline" value={cfg.taglineColor} onChange={(v) => updateCfg({ taglineColor: v })} />
+                  <ColorRow label="Background" value={cfg.bgColor} onChange={(v) => updateCfg({ bgColor: v })} />
+                  <ColorRow label="Border" value={cfg.borderColor} onChange={(v) => updateCfg({ borderColor: v })} />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Typography &amp; Sizing</p>
+                <div className="space-y-3">
+                  <SliderRow label="Font size" value={cfg.fontSize} min={10} max={48} onChange={(v) => updateCfg({ fontSize: v })} />
+                  <SliderRow label="Letter spacing" value={cfg.letterSpacing} min={0} max={20} onChange={(v) => updateCfg({ letterSpacing: v })} />
+                  <SliderRow label="Padding" value={cfg.padding} min={4} max={48} onChange={(v) => updateCfg({ padding: v })} />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Background &amp; Overlay</p>
+                <div className="space-y-3">
+                  <SliderRow label="Overlay opacity" value={cfg.opacity} min={0} max={100} unit="%" onChange={(v) => updateCfg({ opacity: v })} />
+                  <SliderRow label="Overlay blur" value={cfg.overlayBlur} min={0} max={30} onChange={(v) => updateCfg({ overlayBlur: v })} />
+                  <SliderRow label="Image blur" value={cfg.bgBlur} min={0} max={20} onChange={(v) => updateCfg({ bgBlur: v })} />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Border &amp; Shape</p>
+                <div className="space-y-3">
+                  <SliderRow label="Border width" value={cfg.borderWidth} min={0} max={8} onChange={(v) => updateCfg({ borderWidth: v })} />
+                  <SliderRow label="Border radius" value={cfg.borderRadius} min={0} max={40} onChange={(v) => updateCfg({ borderRadius: v })} />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Options</p>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { id: "showOverlay", label: "Show overlay", key: "showOverlay" as keyof OverlayConfig },
+                    { id: "showTagline", label: "Show tagline", key: "showTagline" as keyof OverlayConfig },
+                    { id: "uppercase", label: "Uppercase", key: "uppercase" as keyof OverlayConfig },
+                    { id: "showBorder", label: "Show border", key: "showBorder" as keyof OverlayConfig },
+                    { id: "textShadow", label: "Text shadow", key: "textShadow" as keyof OverlayConfig },
+                  ].map(({ id, label, key }) => (
+                    <label
+                      key={id}
+                      className={`flex items-center gap-2 border rounded-full px-3 py-1.5 cursor-pointer text-xs font-semibold transition-colors ${
+                        cfg[key] ? "border-primary bg-primary/10 text-primary" : "border-border"
+                      }`}
+                    >
+                      <Checkbox
+                        id={id}
+                        checked={!!cfg[key]}
+                        onCheckedChange={(checked) => updateCfg({ [key]: !!checked })}
+                        className="h-3.5 w-3.5"
                       />
-                      <a
-                        href={generatedImageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-600 hover:underline"
-                      >
-                        Download Full Image
-                      </a>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">{result.image_prompt}</p>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => copyToClipboard(result.image_prompt, "image")}
-                  >
-                    {copiedField === "image" ? (
-                      <Check className="mr-2 h-4 w-4" />
-                    ) : (
-                      <Copy className="mr-2 h-4 w-4" />
-                    )}
-                    {copiedField === "image" ? "Copied!" : "Copy Prompt"}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Strategy Tip */}
-              <Card className="border-primary/50 bg-primary/5">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-5 w-5 text-primary" />
-                      <CardTitle className="text-base">Strategy Tip</CardTitle>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={generateContentVariants}
-                      disabled={loadingVariants}
-                    >
-                      {loadingVariants ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <RotateCw className="mr-2 h-4 w-4" />
-                          Content Variants
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm">{result.strategy_tip}</p>
-                </CardContent>
-              </Card>
-
-              {/* Content Variants */}
-              {showVariants && contentVariants.length > 0 && (
-                <Card className="border-green-200 bg-gradient-to-br from-green-50 to-transparent">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5 text-green-600" />
-                      Content Variants
-                    </CardTitle>
-                    <CardDescription>
-                      Multiple versions optimized for different audiences
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {contentVariants.map((variant, idx) => (
-                      <div key={idx} className="space-y-3 p-4 rounded-lg border bg-white">
-                        <div className="flex items-center gap-2">
-                          <Badge>{variant.tone}</Badge>
-                          <span className="text-sm font-medium">Variant {idx + 1}</span>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground mb-1">
-                            Copy
-                          </p>
-                          <p className="text-sm">{variant.copy}</p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground mb-1">
-                            Call to Action
-                          </p>
-                          <p className="text-sm font-medium text-primary">{variant.cta}</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <p className="font-semibold text-muted-foreground">Best Time</p>
-                            <p>{variant.bestTime}</p>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-muted-foreground">SEO Keywords</p>
-                            <p>{variant.seoKeywords}</p>
-                          </div>
-                        </div>
-
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => copyToClipboard(variant.copy, `variant-${idx}`)}
-                        >
-                          {copiedField === `variant-${idx}` ? (
-                            <Check className="mr-2 h-4 w-4" />
-                          ) : (
-                            <Copy className="mr-2 h-4 w-4" />
-                          )}
-                          {copiedField === `variant-${idx}` ? "Copied!" : "Copy Variant"}
-                        </Button>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+
+          {/* Caption Studio */}
+          <div className="mt-8 pt-6 border-t border-dashed space-y-4">
+            <div className="flex items-baseline justify-between gap-4 flex-wrap">
+              <h2 className="font-semibold text-lg">5. Social Media Captions</h2>
+              <p className="text-xs text-muted-foreground">AI-written captions with tone variants, ready to copy.</p>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="space-y-1">
+                <Label className="text-xs">Tone</Label>
+                <Select value={captionTone} onValueChange={setCaptionTone}>
+                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All three tones</SelectItem>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="fun">Fun &amp; Playful</SelectItem>
+                    <SelectItem value="storytelling">Storytelling</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Platform</Label>
+                <Select value={captionPlatform} onValueChange={setCaptionPlatform}>
+                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="linkedin">LinkedIn</SelectItem>
+                    <SelectItem value="twitter">X / Twitter</SelectItem>
+                    <SelectItem value="facebook">Facebook</SelectItem>
+                    <SelectItem value="tiktok">TikTok</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleGenerateCaption}
+                disabled={isGeneratingCaption}
+                className="mt-auto"
+              >
+                {isGeneratingCaption ? "Generating…" : "Generate Captions"}
+              </Button>
+            </div>
+
+            {captionError && (
+              <p className="text-sm text-destructive">{captionError}</p>
+            )}
+
+            {captions.length > 0 && (
+              <div className="grid gap-3">
+                {captions.map((c, i) => (
+                  <div key={i} className="border border-border rounded-xl p-4 space-y-2 bg-muted/20">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground bg-muted px-2.5 py-0.5 rounded-full">
+                        {c.tone}
+                      </span>
+                      <CopyButton text={c.caption + (c.hashtags ? "\n\n" + c.hashtags : "")} />
+                    </div>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{c.caption}</p>
+                    {c.hashtags && (
+                      <p className="text-xs font-semibold text-primary leading-relaxed">{c.hashtags}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {captions.length === 0 && !captionError && !isGeneratingCaption && (
+              <p className="text-sm text-muted-foreground">Generate an image first, then create captions here.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
-  )
+  );
 }
