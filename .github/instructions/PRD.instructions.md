@@ -1,191 +1,129 @@
 ---
-description: "Use when implementing features to align behavior with product requirements and user roles."
+description: "Use when implementing features to align with product requirements and current scope."
 applyTo: "**/*"
 ---
 
-# Product Requirements Document — Smart Business Suite
+# Product Requirements — Aurea
 # Lunar Hack 2.0 · ATIA Club FST · April 11–12, 2026
-# Domain: Perfume / Fragrance SME
+# Domain: Tunisian Artisanal Products
 
 ---
 
-## 1. Product Vision
+## Product Vision
 
-Smart Business Suite is an AI-powered platform built for perfume and fragrance SMEs. It gives any perfume shop owner or boutique fragrance brand the intelligence of a data science team, a sales agent, and a marketing department — without hiring any of them. The platform unifies data analytics, sales qualification, and marketing automation into one system that understands the perfume industry: product families (floral, woody, oriental, fresh), seasonal sales patterns, customer fragrance preferences, and the language of scent.
-
----
-
-## 2. Domain Context — Perfume Industry
-
-All AI prompts, knowledge graph entities, lead scoring signals, and marketing copy generation are perfume-aware.
-
-**Product entities the system understands:**
-- Fragrance name, olfactory family (floral / woody / oriental / fresh / chypre / fougère)
-- Top / middle / base notes
-- Concentration (EDP / EDT / EDC / parfum)
-- Gender classification (masculine / feminine / unisex)
-- Bottle size in ml, price in TND
-- Brand origin (niche / designer / local)
-
-**Customer signals the agent extracts:**
-- Stated preference for note families or specific ingredients (oud, rose, musk, vanilla, citrus)
-- Occasion: daily wear / evening / gift / wedding / Eid
-- Budget stated in TND
-- Skin chemistry mentions ("perfumes fade on me fast")
-- Loyalty signals: repeat buyer, gift buyer, collector
-
-**Seasonal context injected into anomaly detection:**
-- Eid al-Adha, Eid al-Fitr, Valentine's Day, Mother's Day, and wedding season are expected revenue spikes — the AD-LLM prompt is given this context so it does not flag seasonal peaks as anomalies
-
-**Marketing language:**
-- Copy uses sensory and emotional vocabulary: notes, sillage, longevity, mood, memory, occasion, warmth, freshness, depth
-- Platform-adapted: Instagram (visual + sensory storytelling), Email (loyalty and narrative), SMS (flash offer, direct)
+Aurea gives Tunisian artisanal product shop owners the marketing and analytics capabilities of a full team — AI-generated campaigns, a sales chat agent, product intelligence, and email sequences — in one dashboard.
 
 ---
 
-## 3. Users & Roles
+## Users
 
-### 3.1 Business Owner (the only login role on the platform)
-The perfume shop owner or brand manager.
+### Storefront Visitor (`/`)
+- Browses 8 Tunisian handcrafted products
+- Can open the floating chat widget and ask questions
+- Chat agent knows the full product catalog and recommends items
 
-**Capabilities:**
-- Upload monthly sales CSV (columns: date, product_name, olfactory_family, concentration, bottle_size_ml, price_tnd, quantity_sold, customer_id, customer_type, channel)
-- View KPI dashboard: revenue (TND), units sold, top fragrance family, average basket (TND), conversion rate, repeat customer rate, top 5 products
-- Receive alarm notifications when KPIs are anomalous — each alarm includes severity, explanation, and one specific recommended action
-- View all qualified leads: tier badge, score, fragrance preference, stated budget, transcript
-- Configure lead score thresholds and FAQ entries (store hours, return policy, fragrance consultation availability, stock questions)
-- Create marketing campaigns: brief → 3 AI-generated copy variants + AI-generated perfume images via FLUX.1 → select variant → send as email campaign
-- Upload brand guidelines, past Instagram posts, product catalog, tone guide
-- Complete onboarding wizard on first login to seed the knowledge graph
+### Business Owner (`/dashboard`)
+- Views KPI overview (mock data)
+- Generates AI marketing campaigns for any product
+- Generates 3 content variants per campaign (Professional / Fun / Storytelling)
+- Generates AI product images (FLUX.1-schnell)
+- Builds 3-email sequences (Hook → Social Proof → Urgency)
+- Views AI-generated analytics insights and product recommendations
+- Views session/event tracking data (mock data)
 
-### 3.2 Registered Client (the shop's loyalty customer)
-A customer with an account on the perfume shop's website or loyalty program.
-
-**Capabilities:**
-- Chat with the full ReAct + HippoRAG intelligent agent
-- Receive personalized fragrance recommendations (product name, notes, why it fits them)
-- Be scored and tiered as a lead
-- Their conversation and lead profile appear in the owner's dashboard
-
-### 3.3 Anonymous Visitor
-Anyone who opens the chat widget without being logged in.
-
-**Capabilities:**
-- Ask questions answered only from the static FAQ list configured by the owner
-- Examples: "Do you have Baccarat Rouge 540?", "What are your opening hours?", "Do you offer gift wrapping?"
-- No LLM reasoning, no graph access, no lead scoring
-- Unknown question fallback: "For personalized fragrance advice, visit us or email [address]."
+No login. Anyone who opens the dashboard is the "owner."
 
 ---
 
-## 4. Feature Requirements Per Pillar
+## Features — Current State
 
-### Pillar 1 — Analytics Service
+### 1. Storefront (`/`)
+- Product grid with 8 items, categories, prices in TND, stock status
+- Floating chat widget (bottom-right)
+- Chat: streaming GPT-4o-mini, knows full catalog, culturally aware (uses "Marhaba")
 
-| Feature | Description |
-|---|---|
-| CSV Upload | Upload monthly sales file → triggers Celery pipeline → parse → graph index → anomaly detection → insight generation |
-| KPI Dashboard | Revenue (TND), units sold, top olfactory family, average basket, conversion rate, new vs returning ratio, top 5 fragrances |
-| Knowledge Graph | LightRAG graph: entities = fragrances, customers, olfactory families, seasons, channels. Relationships = sold_to, belongs_to_family, peaks_in_season, frequently_bought_with |
-| Insight Cards | AI-generated plain language cards. Example: "Oriental family sales dropped 22%. Your two best-selling ouds were out of stock for 11 days." |
-| Anomaly Detection | AD-LLM zero-shot detection. KPI deltas fed to LLM with perfume-domain + seasonal context. Outputs structured JSON array of anomaly objects. |
-| Alarm System | Each anomaly → one alarm card: severity badge (high=red / medium=orange / low=blue), metric name, deviation %, 2–3 sentence explanation, one specific recommended action. Unread alarms show a notification dot in the sidebar. |
-| Why Drill-Down | Owner clicks insight card → LightRAG dual retrieval → detailed explanation linking fragrances, customer segments, and seasons |
-| Proactive Advice | "3 VIP customers haven't purchased in 45 days — consider a re-engagement offer for their preferred oud family" |
+### 2. Dashboard Overview (`/dashboard`)
+- KPI cards: revenue, conversions, sessions, AOV (from mock data)
+- Quick links to sub-sections
 
-### Pillar 2 — Sales Agent Service
+### 3. Marketing AI (`/dashboard/marketing`)
+- Select product + enter campaign goal → generates: Instagram caption, hashtags, image prompt, strategy tip
+- "Generate Content Variants" → 3 tones, each with caption, hashtags, CTA, post timing, SEO keywords
+- "Generate Image" → FLUX.1-schnell image from the AI-generated prompt
 
-| Feature | Description |
-|---|---|
-| Chat Widget | Embeddable JS snippet. Detects JWT on load → routes to FAQ mode or full agent mode |
-| Dual Mode | No token → FAQ only (static lookup). Valid JWT → ReAct + HippoRAG full agent |
-| ReAct Loop | Thought → Act (tool call) → Observe → repeat until generate_pitch is called |
-| HippoRAG Memory | Past lead outcomes stored as triples. PPR traversal finds chains of similar past customers and what converted them |
-| Lead Scoring | 5-feature formula: source channel + fragrance family affinity + purchase authority (self vs gift) + urgency + stated budget (TND) → score 0–100 |
-| Lead Tiers | Hot >75: ready to buy, knows what they want. Warm 40–75: exploring, needs guidance. Cold <40: browsing, no clear intent |
-| Personalized Recommendation | Agent recommends specific fragrance by name, olfactory family, key notes, occasion fit, and price in TND |
-| Lead Dashboard | Owner sees: tier badge, score, preferred family, budget, recommended product, full transcript |
-| Onboarding Graph Seeding | First-login wizard → owner enters product catalog → each fragrance becomes a graph node |
-| Client Node | Registered client first chat → node created from purchase history + stated preferences |
+### 4. Product Intelligence (`/dashboard/recommendations`)
+- "Generate Insights" → GPT-4o-mini analyzes mock sales data → returns upsell, cross-sell, at-risk, segment analysis
 
-**4 Agent Tools:**
-1. `classify_intent(message)` → intent: browsing / seeking_recommendation / ready_to_buy / gift_shopping + confidence score
-2. `retrieve_similar_leads(entities)` → HippoRAG PPR over kg_triples → top-3 past customers with similar profile + conversion outcome
-3. `score_lead(profile)` → weighted formula → 0–100 score + tier label
-4. `generate_pitch(family, occasion, budget_tnd)` → LightRAG on product KB → fragrance name + notes + why it fits + price
+### 5. Email Campaigns (`/dashboard/email-campaigns`)
+- Select campaign type + product + customer segment → 3-email sequence (streaming)
+- Each email: subject, preview text, body copy, CTA
+- Includes A/B suggestions and send timing
 
-### Pillar 3 — Marketing Assistant Service
+### 6. Analytics (`/dashboard/analytics`)
+- KPI charts (recharts) — weekly visitors, page views, conversion rate, top products
+- "Generate AI Insights" → GPT-4o-mini insight cards with priority levels
+- All data from `lib/mock-data.ts`
 
-| Feature | Description |
-|---|---|
-| Campaign Brief Form | Product/family, target audience, platform (instagram/email/sms), tone |
-| Brand Context Retrieval | LightRAG retrieval from brand_context table → past posts, tone guide, product descriptions |
-| 3 Tone Variants | Professional (elegant, sophisticated), Storytelling (sensory narrative, memory-evoking), Playful (casual, emoji-friendly, trending) |
-| FLUX.1 Image Generation | After each variant is generated: derive a visual prompt from the copy tone + product notes → call Hugging Face FLUX.1-schnell → return generated perfume image URL |
-| LLM-as-Judge | Score each variant 0–10 on: fluency, relevance to perfume brand, brand alignment, CTR proxy. Show score breakdown + judge reasoning to owner. |
-| Email Sending | Owner selects variant → enters recipient list or selects from registered_clients → system sends HTML email (copy + FLUX.1 image embedded) via SMTP or SendGrid |
-| Auto-trigger | When hot lead qualified → Redis Stream event → system auto-creates pre-filled campaign brief for that lead's fragrance family and budget segment |
-| Brand Upload | Owner uploads: past posts, tone guidelines, product catalog PDF, brand color palette description |
+### 7. User Tracking (`/dashboard/tracking`)
+- Displays sessions, product events, conversion metrics
+- Data from mock seed + any new events logged via `/api/track` (in-memory, resets on restart)
 
-**Email campaign detail:**
-- Subject: auto-generated from copy variant, editable before sending
-- HTML body: rendered template with caption text, hashtags, and FLUX.1 image
-- Recipient list: manually typed addresses or pulled from registered_clients table for the business
-- Status tracking: pending / sent / failed with error message on failure
+### 8. Products (`/dashboard/products`)
+- Table view of all 8 products with category, price, stock status
+
+### 9. Settings (`/dashboard/settings`)
+- UI placeholder — no functional settings yet
 
 ---
 
-## 5. Cross-Service Intelligence Loop
+## API Surface
 
-```
-[Sales Service]
-Hot lead qualified — oriental family, 350 TND budget
-        ↓  publishes → "lead_qualified" stream
-[Analytics] → increments hot_leads_today KPI
-[Marketing] → auto-creates campaign brief: oriental collection, high-budget segment
+| Route | Method | What it returns |
+|---|---|---|
+| `/api/chat` | POST | Streaming text — sales conversation |
+| `/api/marketing` | POST | JSON — caption, hashtags, image_prompt, strategy_tip |
+| `/api/content-variants` | POST | Streaming JSON array — 3 tone variants |
+| `/api/insights` | POST | Streaming JSON array — 3-4 insight cards |
+| `/api/recommendations` | POST | Streaming JSON — cross-sell/upsell analysis |
+| `/api/email-campaign` | POST | Streaming JSON array — 3-email sequence |
+| `/api/qualify-lead` | POST | Streaming text with tool-call — lead score + actions |
+| `/api/generate-image` | POST | Raw image bytes (JPEG) |
+| `/api/enhance-prompt` | POST | JSON — `{ prompt, provider }` |
+| `/api/track` | POST | JSON — tracking confirmation |
+| `/api/track` | GET | JSON — session/event/order counts |
 
-[Analytics Service]
-Anomaly detected — floral family revenue -35% vs last month
-        ↓  generates alarm card (severity=high, recommended action)
-        ↓  publishes → "insight_generated" stream
-[Marketing] → (optional) suggests promotional campaign for floral collection
-```
-
----
-
-## 6. Architecture Decision — Monolith with Microservice Structure
-
-The application runs as a **single FastAPI monolith** for hackathon deployment simplicity. The codebase is structured into three independent service folders (`service_analytics/`, `service_sales/`, `service_marketing/`) that mirror microservice architecture exactly in their internal design, naming, and boundaries. Cross-service communication uses Redis Streams — the same pattern used in a real microservice deployment, without the network hop.
-
-This structure allows demonstrating microservice architecture thinking to the jury while running and deploying as a single process.
-
----
-
-## 7. Non-Functional Requirements
-
-| Requirement | Specification |
-|---|---|
-| LLM (primary) | Groq API — `llama-3.3-70b-versatile` |
-| LLM (fallback) | OpenAI API — `gpt-4o-mini` |
-| Image generation | Hugging Face Inference API — `black-forest-labs/FLUX.1-schnell` |
-| Embeddings | OpenAI `text-embedding-3-small` — 1536 dims |
-| Email sending | SMTP or SendGrid — switched via `EMAIL_PROVIDER` env var |
-| Background tasks | Celery 5 + Redis — LLM calls, graph indexing, image generation, email sending all async |
-| Event bus | Redis Streams — streams: `lead_qualified`, `insight_generated` |
-| Database | PostgreSQL 16 + pgvector — schemas: `auth`, `analytics`, `sales`, `marketing` |
-| ORM + migrations | SQLAlchemy 2.0 async + Alembic |
-| Auth | JWT via python-jose + passlib bcrypt — 24h owner tokens, 2h client widget tokens |
-| Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS, shadcn/ui |
-| Local dev | Docker Compose |
-| Deployment | Vercel (frontend) + Render (backend + worker) |
+FastAPI backend also exposes:
+| Route | Method | What it returns |
+|---|---|---|
+| `/health` | GET | `{ ok: true }` |
+| `/api/generate-image` | POST | Raw image bytes (JPEG) |
+| `/api/enhance-prompt` | POST | JSON — `{ prompt, provider }` |
+| `/api/generate-captions` | POST | JSON — `{ captions: [...] }` |
 
 ---
 
-## 8. Out of Scope
+## Out of Scope (not built, not planned for hackathon)
 
-- Payment / subscription management
-- Real-time WebSocket push (10s polling is acceptable for demo)
+- User authentication / login
+- Real database (all data is mock)
+- Actual email sending (content is generated only)
+- Image storage (generated images not saved)
+- Multi-tenant / multi-business support
+- Arabic or French UI
 - Mobile app
-- Fine-tuning any model
-- Arabic or French UI (English only for demo)
-- Inventory management
+- Payment / checkout flow
+- Real-time WebSocket push
+- Celery, Redis, pgvector, LightRAG, AD-LLM, HippoRAG — none of these are implemented
+
+---
+
+## Actual Next Steps (priority order)
+
+1. Add `.env.local.example` at repo root with all required env vars
+2. Pick one image gen path — Next.js `/api/generate-image` and FastAPI `/api/generate-image` are duplicates
+3. Add Supabase/Postgres to persist products, sessions, events, orders
+4. Persist `/api/track` writes to real DB instead of in-memory arrays
+5. Add image storage (Supabase Storage or R2) so generated images have a URL
+6. Add auth (NextAuth or Supabase Auth) to separate storefront visitors from the owner dashboard
+7. Retire `lunarhack/` — fully superseded
+8. Deploy: Next.js → Vercel, FastAPI → Railway or Fly.io

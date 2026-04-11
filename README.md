@@ -1,318 +1,197 @@
-# SmartSouk - AI-Powered SMB Intelligence Platform
+# Aurea — AI-Powered SMB Marketing Platform
 
-> Transform your business with AI-driven analytics, marketing automation, and intelligent sales conversations.
+An AI platform for small and medium businesses combining marketing automation, sales intelligence, and analytics. Built for LunarHack.
 
-**SmartSouk** is a comprehensive AI platform designed to make any SMB "smart" by combining advanced data analytics, marketing automation, and conversational intelligence. It demonstrates deep technical integration of three core pillars: Smart Analytics, Sales Intelligence, and Marketing AI.
+---
 
-## Project Overview
+## What's Actually Built
 
-SmartSouk addresses the challenge faced by small and medium businesses: **lack of accessible AI tools to understand customers, automate marketing, and make data-driven decisions**. Our solution combines three powerful capabilities in one cohesive platform.
+### Frontend + Next.js API layer (`/`)
+- **Next.js 16** App Router, TypeScript, Tailwind CSS v4, shadcn/ui
+- Dashboard with pages: Overview, Products, Marketing AI, Product Intel, Email Campaigns, User Tracking, Analytics, Settings
+- Floating chat widget on the storefront (sales agent)
+- All AI calls go through Next.js API routes, which proxy to OpenAI via Vercel AI SDK
 
-### The 3 Core Pillars
+### Python Backend (`/backend`)
+- **FastAPI** server handling image generation and prompt enhancement
+- `POST /api/generate-image` — HuggingFace FLUX.1-schnell (via nscale provider)
+- `POST /api/enhance-prompt` — Gemini 2.5 Flash Lite rewrites rough prompts into production-ready image prompts
+- `POST /api/generate-captions` — Gemini 2.5 Flash Lite generates social media captions per tone/platform
+- `GET  /health`
 
-#### 1. **Smart Analytics Dashboard** ✨
-- **AI-Powered Insights**: Real-time analysis of sales data, customer behavior, and market trends
-- **Actionable Recommendations**: Automatic detection of opportunities (e.g., "Sales spike on Fridays - launch targeted promotions")
-- **KPI Tracking**: Real-time metrics on visitors, conversions, session duration, and revenue
-- **Visual Analytics**: Interactive charts showing product performance, traffic sources, and customer segments
+### Separate Express prototype (`/lunarhack`)
+- Standalone vanilla HTML/CSS/JS app with its own Express server
+- Duplicate of image gen + caption logic — predates the Next.js app and FastAPI backend
+- Can be retired once FastAPI is confirmed working
 
-#### 2. **Sales Intelligence Agent** 💬
-- **Conversational AI**: Floating chat widget that engages visitors instantly
-- **Product Knowledge**: AI has complete inventory knowledge and can recommend items based on customer needs
-- **Lead Qualification**: (Ready to integrate) Structured conversations that qualify prospects by industry, budget, and needs
-- **Personalized Recommendations**: Smart product suggestions based on customer profile and behavior
-
-#### 3. **Marketing AI Assistant** 📱
-- **Campaign Generator**: Create complete social media campaigns in seconds
-- **Multi-Variant Content**: Generate professional, fun, and storytelling variations automatically
-- **AI Image Generation**: Create product images using advanced image synthesis (Fal AI integration)
-- **Content Optimization**: SEO keywords, hashtag suggestions, optimal posting times
-- **Email Sequences**: Generate 3-email campaigns with hooks, social proof, and urgency angles
+---
 
 ## Tech Stack
 
-### Frontend
-- **Next.js 16** with App Router - Modern React with server-side capabilities
-- **TypeScript** - Type-safe development
-- **Tailwind CSS v4** - Responsive design
-- **shadcn/ui** - Enterprise-grade UI components
-- **Lucide Icons** - Beautiful icon system
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4, shadcn/ui |
+| Next.js AI routes | Vercel AI SDK 6, OpenAI GPT-4o-mini (streaming + structured output) |
+| Python backend | FastAPI, Uvicorn, httpx, Pillow |
+| Image generation | HuggingFace Inference API — FLUX.1-schnell (nscale provider) |
+| Prompt/caption AI | Google Gemini 2.5 Flash Lite |
+| Data | In-memory mock data (no DB yet) |
 
-### AI & ML
-- **Vercel AI SDK 6** - Unified AI interface with streaming support
-- **OpenAI GPT-4o-mini** - Advanced language model for all AI features
-- **Fal AI** - Cutting-edge image generation for marketing
-- **Tool-Calling & Agents** - Structured AI workflows for complex tasks
-
-### Backend
-- **Next.js API Routes** - Serverless functions for AI operations
-- **Streaming Responses** - Real-time AI output for better UX
-- **Server Actions** - Secure client-server communication
-
-## Key Features
-
-### Dashboard & Analytics
-- Real-time KPI dashboard with trend analysis
-- **AI Insights Generation**: Click "Generate Insights" to get actionable recommendations
-- Top products tracking with view-to-conversion analysis
-- Traffic source breakdown (Instagram, Direct, Search, etc.)
-- Customer behavior analytics
-
-### Marketing Center
-- **Campaign Builder**: Select product + goal, get instant marketing content
-- **Content Variants**: Professional, fun, and storytelling versions
-- **AI Image Generator**: Create product images from text prompts
-- **Hashtag & SEO Suggestions**: Optimized for reach and discovery
-- **Publishing Schedule**: Optimal posting times based on audience
-
-### Product Intelligence
-- **Cross-sell Recommendations**: Which products sell together
-- **Upsell Opportunities**: What customers buy after current products
-- **At-Risk Products**: Low-converting items that need attention
-- **Customer Segment Profiles**: Preferences and behavior by segment
-- **Trend Analysis**: Seasonal patterns and emerging opportunities
-
-### Email Campaign Builder
-- **Sequence Generation**: Hook → Social Proof → Urgency (3-email flow)
-- **Multiple Campaign Types**: Promotional, Abandoned Cart, Welcome, Upsell, Win-back
-- **A/B Testing Suggestions**: Data-backed optimization recommendations
-- **Target Segmentation**: High-value, VIP, Inactive, or New customers
-
-### Sales Chat Widget
-- **24/7 Availability**: Engage customers anytime
-- **Product Recommendations**: AI knows entire catalog, suggests based on needs
-- **Welcome Message**: Greets visitors in Arabic (Marhaba!) - culturally responsive
-- **Conversational Tone**: Natural, helpful language that builds trust
-
-## Getting Started
-
-### Prerequisites
-- Node.js 18+ 
-- pnpm (or npm/yarn)
-- Environment variables set up in Vercel
-
-### Installation
-
-```bash
-# Clone repository
-git clone <repo-url>
-cd smartsouk
-
-# Install dependencies
-pnpm install
-
-# Set up environment variables
-# Copy .env.example to .env.local and fill in:
-# - OPENAI_API_KEY (from your OpenAI account)
-# - FAL_KEY (from Fal AI dashboard for image generation)
-
-# Run development server
-pnpm dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Environment Variables Required
-
-```env
-# AI Models
-OPENAI_API_KEY=sk-... # OpenAI API key for GPT models
-
-# Image Generation
-FAL_KEY=fal-... # Fal AI API key for image generation
-```
+---
 
 ## Project Structure
 
 ```
-smartsouk/
+Aurea/
 ├── app/
-│   ├── page.tsx                    # Storefront homepage
+│   ├── page.tsx                      # Storefront homepage + chat widget
 │   ├── dashboard/
-│   │   ├── layout.tsx              # Dashboard navigation
-│   │   ├── page.tsx                # Overview page
-│   │   ├── products/page.tsx        # Product management
-│   │   ├── marketing/page.tsx       # Marketing AI center
-│   │   ├── recommendations/page.tsx # Product intelligence
-│   │   ├── email-campaigns/page.tsx # Email builder
-│   │   ├── analytics/page.tsx       # Analytics with AI insights
-│   │   └── settings/page.tsx        # Configuration
+│   │   ├── layout.tsx                # Sidebar navigation
+│   │   ├── page.tsx                  # Overview KPIs
+│   │   ├── products/page.tsx
+│   │   ├── marketing/page.tsx        # Campaign builder + image gen
+│   │   ├── recommendations/page.tsx  # Product intelligence
+│   │   ├── email-campaigns/page.tsx  # Email sequence builder
+│   │   ├── analytics/page.tsx        # AI insights dashboard
+│   │   ├── tracking/page.tsx         # Session / event tracking
+│   │   └── settings/page.tsx
 │   └── api/
-│       ├── chat/route.ts           # Conversational AI (streaming)
-│       ├── marketing/route.ts       # Marketing campaign generation
-│       ├── insights/route.ts        # AI analytics insights
-│       ├── content-variants/route.ts # Multi-variant content
-│       ├── recommendations/route.ts  # Product recommendations
-│       ├── email-campaign/route.ts  # Email sequence generation
-│       ├── qualify-lead/route.ts    # Lead qualification (enhanced)
-│       └── generate-image/route.ts  # AI image generation
+│       ├── chat/route.ts             # Streaming sales chat (GPT-4o-mini)
+│       ├── marketing/route.ts        # Campaign generation (GPT-4o-mini, structured output)
+│       ├── content-variants/route.ts # 3-tone content variants
+│       ├── insights/route.ts         # Analytics AI insights
+│       ├── recommendations/route.ts  # Cross-sell / upsell recommendations
+│       ├── email-campaign/route.ts   # 3-email sequence generation
+│       ├── qualify-lead/route.ts     # Lead scoring with tool-calling
+│       ├── generate-image/route.ts   # HuggingFace FLUX image gen (mirrors backend)
+│       └── enhance-prompt/route.ts   # Gemini prompt enhancement (mirrors backend)
+├── backend/                          # FastAPI Python backend
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── routers/
+│       ├── health.py
+│       ├── image.py                  # /api/generate-image, /api/enhance-prompt
+│       └── captions.py              # /api/generate-captions
 ├── components/
-│   ├── chat-widget.tsx             # Floating sales agent
-│   └── ui/                         # shadcn/ui components
+│   ├── chat-widget.tsx
+│   └── ui/                           # shadcn/ui components
 ├── lib/
-│   ├── mock-data.ts                # Sample products & data
-│   └── utils.ts                    # Utility functions
-└── public/                         # Static assets
+│   ├── mock-data.ts                  # Products + mock sessions/events/orders
+│   └── utils.ts
+├── lunarhack/                        # Standalone Express prototype (legacy)
+└── public/
 ```
-
-## How It Works
-
-### AI Insights Flow
-1. User clicks "Generate Insights" on Analytics page
-2. Frontend sends sales data to `/api/insights`
-3. OpenAI analyzes data and returns structured insights
-4. Insights displayed in real-time with actionable recommendations
-
-### Marketing Campaign Flow
-1. User selects product + campaign goal in Marketing AI
-2. Frontend calls `/api/marketing` with product details
-3. AI generates Instagram caption, hashtags, image prompt, strategy tip
-4. User can generate content variants and create product images
-
-### Sales Chat Flow
-1. Visitor opens storefront, sees chat widget
-2. User sends message (e.g., "What's your best selling product?")
-3. Message sent to `/api/chat` with conversation history
-4. AI uses product catalog knowledge to provide personalized response
-5. Streaming response shown in real-time as it generates
-
-## AI Capabilities
-
-### GPT-4o-mini for:
-- Sales conversations with product knowledge
-- Marketing content generation (captions, hashtags, strategies)
-- Email campaign writing (3-email sequences)
-- Analytics data analysis and insight generation
-- Lead qualification and scoring
-
-### Fal AI for:
-- High-quality product image generation
-- Professional photography-style visuals
-- Studio lighting simulation
-- 4K quality image generation
-
-## Winning Features
-
-1. **End-to-End AI Integration**: Every major business function has AI assistance
-2. **Real-time Streaming**: Users see AI responses as they're generated
-3. **Practical Outputs**: Not just recommendations - complete ready-to-use content
-4. **Multi-variant Generation**: A/B testing built into the platform
-5. **Cultural Awareness**: Arabic greetings, Tunisian focus, local relevance
-6. **Scalable Architecture**: Can expand to any product category or business type
-
-## Demo Walkthrough
-
-### 1. Chat Widget (Sales Intelligence)
-- Visit homepage, click chat widget
-- Ask "Show me your most popular items"
-- Get personalized product recommendations
-
-### 2. Marketing AI
-- Go to Dashboard → Marketing AI
-- Select "Handwoven Berber Rug"
-- Enter campaign goal: "Mother's Day Sale"
-- See generated caption, hashtags, image prompt
-- Click "Generate Image" to create product photo
-- Click "Content Variants" for 3 different tones
-
-### 3. Product Intelligence
-- Go to Dashboard → Product Intel
-- Click "Generate Insights"
-- See cross-sell recommendations, at-risk products, customer segments
-
-### 4. Email Campaigns
-- Go to Dashboard → Email Campaigns
-- Set up promotional campaign for olive oil
-- Target high-value customers
-- Get 3-email sequence with hook, social proof, urgency
-
-### 5. Analytics with Insights
-- Go to Dashboard → Analytics
-- View KPIs and charts
-- Click "Generate Insights"
-- Get AI analysis of your sales performance and recommendations
-
-## API Endpoints
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/chat` | POST | Streaming conversational AI for sales |
-| `/api/marketing` | POST | Generate marketing campaigns |
-| `/api/insights` | POST | Analyze data and generate insights |
-| `/api/content-variants` | POST | Create multi-tone content variations |
-| `/api/recommendations` | POST | Product intelligence & cross-sell analysis |
-| `/api/email-campaign` | POST | Generate email sequences |
-| `/api/generate-image` | POST | AI image generation for products |
-
-## Performance Optimizations
-
-- **Streaming Responses**: AI outputs stream in real-time instead of waiting
-- **Server-Side AI**: All AI operations run server-side for security
-- **Efficient Data Loading**: Mock data structure optimized for quick analytics
-- **Client-Side UI State**: React hooks manage UI responsiveness
-
-## Security Considerations
-
-- **No API Keys Exposed**: All AI calls made from server (Next.js API routes)
-- **Environment Variables**: Secrets stored in Vercel environment
-- **Type Safety**: TypeScript prevents runtime errors
-- **Input Validation**: All user inputs validated before API calls
-
-## Future Enhancements
-
-1. **Database Integration**: Replace mock data with real Supabase/PostgreSQL
-2. **User Authentication**: Secure login with user-specific dashboards
-3. **Real-time Notifications**: Alert users of high-value recommendations
-4. **Advanced Analytics**: Deeper metrics on customer lifetime value, churn prediction
-5. **Webhook Integration**: Send campaigns to email/SMS providers
-6. **Multi-language Support**: Expand beyond Arabic and French
-7. **Custom Models**: Fine-tune on client-specific product data
-8. **A/B Testing Platform**: Run and track experiments directly in app
-
-## Deployment
-
-Deploy to Vercel (the creators of Next.js):
-
-```bash
-# Connect GitHub repo to Vercel
-# Add environment variables in Vercel dashboard
-# Each push to main auto-deploys
-
-vercel deploy
-```
-
-## Hackathon Checklist
-
-- ✅ **Functional Prototype**: All 3 pillars fully implemented and working
-- ✅ **Real AI Integration**: OpenAI GPT-4o-mini + Fal AI image generation
-- ✅ **Streaming Responses**: Real-time AI output for better UX
-- ✅ **Production Code**: Type-safe, well-organized, documented
-- ✅ **Concrete Use Case**: Tunisian artisanal products e-commerce
-- ✅ **Live Demo Ready**: All features work without setup
-- ✅ **Business Value**: Clear ROI for SMBs (better decisions, more sales)
-- ✅ **Scalable Architecture**: Can be adapted to any product/industry
-
-## Contributing
-
-To add new features:
-1. Create a new API route in `app/api/`
-2. Add UI component in `app/dashboard/`
-3. Update navigation in `dashboard/layout.tsx`
-4. Test with mock data before connecting real data
-
-## License
-
-MIT - Feel free to use and modify for your own projects
-
-## Support
-
-Need help? Check out:
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Vercel AI SDK Docs](https://sdk.vercel.ai)
-- [Fal AI Documentation](https://fal.ai/docs)
 
 ---
 
-**Built for the hackathon with 🚀 by Team [Your Team Name]**
+## Getting Started
 
-*Transforming SMBs with AI. One insight at a time.*
+### Prerequisites
+- Node.js 18+, pnpm
+- Python 3.11+
+
+### Next.js app
+
+```bash
+pnpm install
+cp .env.local.example .env.local   # fill in OPENAI_API_KEY
+pnpm dev                            # http://localhost:3000 (or 3001 if backend is on 3000)
+```
+
+### FastAPI backend
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate           # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env                # fill in GEMINI_API_KEY and HF_TOKEN
+uvicorn main:app --reload --port 8000
+```
+
+Backend runs on `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
+
+---
+
+## Environment Variables
+
+### Next.js (`.env.local`)
+```env
+OPENAI_API_KEY=sk-...        # GPT-4o-mini for all chat/marketing/insights routes
+HF_TOKEN=hf_...              # HuggingFace token for image generation
+GEMINI_API_KEY=AIza...       # Gemini 2.5 Flash Lite for prompt enhancement
+FASTAPI_URL=http://localhost:8000   # FastAPI backend URL (optional, for proxying)
+```
+
+### FastAPI backend (`backend/.env`)
+```env
+GEMINI_API_KEY=AIza...
+HF_TOKEN=hf_...
+```
+
+---
+
+## API Endpoints
+
+### Next.js API routes (serverless, streaming)
+| Endpoint | Method | What it does |
+|---|---|---|
+| `/api/chat` | POST | Streaming sales chat, knows product catalog |
+| `/api/marketing` | POST | Campaign generation — caption, hashtags, image prompt, strategy |
+| `/api/content-variants` | POST | 3 tone variants (Professional / Fun / Storytelling) |
+| `/api/insights` | POST | AI analysis of analytics data |
+| `/api/recommendations` | POST | Cross-sell / upsell / at-risk product analysis |
+| `/api/email-campaign` | POST | 3-email sequence (Hook → Social Proof → Urgency) |
+| `/api/qualify-lead` | POST | Lead scoring with tool-calling |
+| `/api/generate-image` | POST | FLUX.1-schnell image generation |
+| `/api/enhance-prompt` | POST | Gemini prompt enhancement |
+| `/api/track` | POST/GET | In-memory session/event/order tracking |
+
+### FastAPI backend (long-running, Python)
+| Endpoint | Method | What it does |
+|---|---|---|
+| `/health` | GET | Health check |
+| `/api/generate-image` | POST | FLUX.1-schnell via HuggingFace (with retry + rate limiting) |
+| `/api/enhance-prompt` | POST | Gemini 2.5 Flash Lite prompt enhancement |
+| `/api/generate-captions` | POST | Gemini captions per tone + platform |
+
+---
+
+## What's Missing / Actual Next Steps
+
+### Must-have for a real product
+- [ ] **Database** — replace `lib/mock-data.ts` with a real DB (Supabase/Postgres). Products, sessions, events, and orders are all hardcoded in memory right now.
+- [ ] **Auth** — no login, no user accounts. Every visitor sees the same dashboard.
+- [ ] **Wire Next.js → FastAPI** — the Next.js `generate-image` and `enhance-prompt` routes duplicate the FastAPI logic. Pick one and proxy to it.
+- [ ] **`.env.local.example`** — root-level env example file is missing. Add it.
+
+### Nice-to-have
+- [ ] **Real tracking** — `/api/track` pushes to in-memory arrays (lost on restart). Needs a DB write.
+- [ ] **Image storage** — generated images are returned as raw bytes and not saved anywhere. Add S3/R2/Supabase Storage.
+- [ ] **Retire `lunarhack/`** — the Express prototype is superseded by the FastAPI backend.
+- [ ] **Streaming from FastAPI** — image gen response is currently blocking. Add SSE or a job-queue pattern for long generations.
+- [ ] **Deploy** — Next.js → Vercel, FastAPI → Railway / Render / Fly.io
+
+---
+
+## Data Flow
+
+```
+Browser
+  └─ storefront / dashboard (Next.js)
+       ├─ /api/chat              → OpenAI GPT-4o-mini (streaming)
+       ├─ /api/marketing         → OpenAI GPT-4o-mini (structured output)
+       ├─ /api/insights          → OpenAI GPT-4o-mini (streaming)
+       ├─ /api/content-variants  → OpenAI GPT-4o-mini (streaming)
+       ├─ /api/recommendations   → OpenAI GPT-4o-mini (streaming)
+       ├─ /api/email-campaign    → OpenAI GPT-4o-mini (streaming)
+       ├─ /api/qualify-lead      → OpenAI GPT-4o-mini + tool-calling
+       ├─ /api/generate-image    → HuggingFace FLUX.1-schnell
+       └─ /api/enhance-prompt    → Gemini 2.5 Flash Lite
+
+FastAPI backend (localhost:8000)
+  ├─ /api/generate-image    → HuggingFace FLUX.1-schnell (with retry/rate-limit)
+  ├─ /api/enhance-prompt    → Gemini 2.5 Flash Lite
+  └─ /api/generate-captions → Gemini 2.5 Flash Lite
+```
