@@ -5,6 +5,46 @@ import {
   type TrackEventPayload,
 } from "@/lib/tracking-types"
 
+function parseNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined
+  }
+
+  const normalized = value.trim()
+  return normalized ? normalized : undefined
+}
+
+function normalizePagePath(value: string): string {
+  try {
+    const parsed = new URL(value, "https://aurea.local")
+    return parsed.pathname || "/"
+  } catch {
+    const [withoutQuery] = value.split("?")
+    return withoutQuery || "/"
+  }
+}
+
+function parseUtmFieldsFromUrl(value: string): Partial<TrackEventMetadata> {
+  try {
+    const parsed = new URL(value, "https://aurea.local")
+    const source = parsed.searchParams.get("utm_source")?.trim()
+    const medium = parsed.searchParams.get("utm_medium")?.trim()
+    const campaign = parsed.searchParams.get("utm_campaign")?.trim()
+    const term = parsed.searchParams.get("utm_term")?.trim()
+    const content = parsed.searchParams.get("utm_content")?.trim()
+
+    return {
+      utm_source: source || undefined,
+      utm_medium: medium || undefined,
+      utm_campaign: campaign || undefined,
+      utm_term: term || undefined,
+      utm_content: content || undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
 function parseTrackMetadata(value: unknown): TrackEventMetadata | undefined {
   if (!value || typeof value !== "object") {
     return undefined
@@ -13,16 +53,24 @@ function parseTrackMetadata(value: unknown): TrackEventMetadata | undefined {
   const rawMetadata = value as Record<string, unknown>
   const metadata: TrackEventMetadata = {}
 
-  if (typeof rawMetadata.page === "string") {
-    metadata.page = rawMetadata.page
+  const rawPage = parseNonEmptyString(rawMetadata.page)
+  if (rawPage) {
+    metadata.page = normalizePagePath(rawPage)
+  }
+
+  const rawPageUrl = parseNonEmptyString(rawMetadata.page_url)
+  if (rawPageUrl) {
+    metadata.page_url = rawPageUrl
+    metadata.page = metadata.page ?? normalizePagePath(rawPageUrl)
   }
 
   if (rawMetadata.user_type === "guest" || rawMetadata.user_type === "customer") {
     metadata.user_type = rawMetadata.user_type
   }
 
-  if (typeof rawMetadata.user_id === "string") {
-    metadata.user_id = rawMetadata.user_id
+  const userId = parseNonEmptyString(rawMetadata.user_id)
+  if (userId) {
+    metadata.user_id = userId
   }
 
   if (typeof rawMetadata.time_spent_ms === "number" && Number.isFinite(rawMetadata.time_spent_ms)) {
@@ -33,13 +81,34 @@ function parseTrackMetadata(value: unknown): TrackEventMetadata | undefined {
     metadata.scroll_depth = rawMetadata.scroll_depth
   }
 
-  if (typeof rawMetadata.quantity === "number" && Number.isFinite(rawMetadata.quantity)) {
-    metadata.quantity = rawMetadata.quantity
+  const explicitSource = parseNonEmptyString(rawMetadata.utm_source)
+  const explicitMedium = parseNonEmptyString(rawMetadata.utm_medium)
+  const explicitCampaign = parseNonEmptyString(rawMetadata.utm_campaign)
+  const explicitTerm = parseNonEmptyString(rawMetadata.utm_term)
+  const explicitContent = parseNonEmptyString(rawMetadata.utm_content)
+
+  if (explicitSource) {
+    metadata.utm_source = explicitSource
+  }
+  if (explicitMedium) {
+    metadata.utm_medium = explicitMedium
+  }
+  if (explicitCampaign) {
+    metadata.utm_campaign = explicitCampaign
+  }
+  if (explicitTerm) {
+    metadata.utm_term = explicitTerm
+  }
+  if (explicitContent) {
+    metadata.utm_content = explicitContent
   }
 
-  if (typeof rawMetadata.price_paid === "number" && Number.isFinite(rawMetadata.price_paid)) {
-    metadata.price_paid = rawMetadata.price_paid
-  }
+  const utmFromUrl = parseUtmFieldsFromUrl(metadata.page_url ?? rawPage ?? "")
+  metadata.utm_source = metadata.utm_source ?? utmFromUrl.utm_source
+  metadata.utm_medium = metadata.utm_medium ?? utmFromUrl.utm_medium
+  metadata.utm_campaign = metadata.utm_campaign ?? utmFromUrl.utm_campaign
+  metadata.utm_term = metadata.utm_term ?? utmFromUrl.utm_term
+  metadata.utm_content = metadata.utm_content ?? utmFromUrl.utm_content
 
   return Object.keys(metadata).length > 0 ? metadata : undefined
 }
@@ -62,9 +131,6 @@ function parseTrackPayload(value: unknown): TrackEventPayload | null {
   const payload: TrackEventPayload = {
     event_type: body.event_type,
     session_id: sessionId,
-    timestamp: typeof body.timestamp === "number" && Number.isFinite(body.timestamp)
-      ? body.timestamp
-      : Date.now(),
     metadata: parseTrackMetadata(body.metadata),
   }
 
@@ -108,6 +174,8 @@ export async function POST(request: Request) {
       total_events: stats.totalEvents,
       total_orders: stats.totalOrders,
       revenue: stats.totalRevenue,
+      revenue_per_visitor: stats.revenuePerVisitor,
+      cart_abandonment_rate: stats.cartAbandonmentRate,
     })
   } catch {
     return Response.json({ error: "Tracking failed" }, { status: 500 })
@@ -132,6 +200,8 @@ export async function GET() {
       orders_count: data.stats.totalOrders,
       revenue: data.stats.totalRevenue,
       avg_session_duration: data.stats.avgSessionDuration,
+      revenue_per_visitor: data.stats.revenuePerVisitor,
+      cart_abandonment_rate: data.stats.cartAbandonmentRate,
     })
   } catch {
     return Response.json({ error: "Failed to fetch tracking data" }, { status: 500 })

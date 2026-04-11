@@ -23,6 +23,10 @@ const emptyStats: TrackingStats = {
   totalOrders: 0,
   totalRevenue: 0,
   avgSessionDuration: 0,
+  revenuePerVisitor: 0,
+  cartAbandonmentRate: 0,
+  cartsStarted: 0,
+  cartsAbandoned: 0,
 }
 
 export default function TrackingDashboard() {

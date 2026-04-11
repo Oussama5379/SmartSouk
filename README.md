@@ -125,6 +125,7 @@ FASTAPI_URL=http://localhost:8000   # FastAPI backend URL (optional, for proxyin
 DATABASE_URL=postgresql://...       # Neon Postgres URL for sessions/events/orders tracking
 UPSTASH_REDIS_REST_URL=https://...  # Upstash Redis REST URL for session context cache
 UPSTASH_REDIS_REST_TOKEN=...        # Upstash Redis REST token
+PAYMENT_WEBHOOK_SECRET=...          # Shared secret used by /api/webhooks/payment
 ```
 
 ### FastAPI backend (`backend/.env`)
@@ -140,16 +141,17 @@ HF_TOKEN=hf_...
 ### Next.js API routes (serverless, streaming)
 | Endpoint | Method | What it does |
 |---|---|---|
-| `/api/chat` | POST | Streaming sales chat with session/page/product context |
+| `/api/chat` | POST | Streaming sales chat with session/page/product context + retrieved catalog grounding (RAG) |
 | `/api/marketing` | POST | Campaign generation — caption, hashtags, image prompt, strategy |
 | `/api/content-variants` | POST | 3 tone variants (Professional / Fun / Storytelling) |
 | `/api/insights` | POST | AI analysis of analytics data |
-| `/api/recommendations` | POST | Cross-sell / upsell / at-risk product analysis |
+| `/api/recommendations` | GET/POST | Deterministic market-basket/RFM/inventory signals + analytics RAG synthesis for insight summary and actions |
 | `/api/email-campaign` | POST | 3-email sequence (Hook → Social Proof → Urgency) |
 | `/api/qualify-lead` | POST | JSON lead score + recommendations with tool-calling |
 | `/api/generate-image` | POST | FLUX.1-schnell image generation |
 | `/api/enhance-prompt` | POST | Gemini prompt enhancement |
-| `/api/track` | POST/GET | Neon-backed session/event/order tracking + dashboard aggregates |
+| `/api/track` | POST/GET | Neon-backed session + product tracking, including UTM attribution capture |
+| `/api/webhooks/payment` | POST | Secure server-side order logging from confirmed payment webhook events |
 
 ### FastAPI backend (long-running, Python)
 | Endpoint | Method | What it does |
@@ -170,7 +172,7 @@ HF_TOKEN=hf_...
 - [x] **`.env.local.example`** — root-level env example file is now included.
 
 ### Nice-to-have
-- [x] **Real tracking** — `/api/track` now writes sessions/events/orders to Neon and uses Upstash for session context.
+- [x] **Real tracking** — `/api/track` writes sessions/events to Neon, and confirmed orders are logged server-side via `/api/webhooks/payment`.
 - [ ] **Image storage** — generated images are returned as raw bytes and not saved anywhere. Add S3/R2/Supabase Storage.
 - [ ] **Retire `lunarhack/`** — the Express prototype is superseded by the FastAPI backend.
 - [ ] **Streaming from FastAPI** — image gen response is currently blocking. Add SSE or a job-queue pattern for long generations.
@@ -183,12 +185,13 @@ HF_TOKEN=hf_...
 ```
 Browser
   └─ storefront / dashboard (Next.js)
-       ├─ /api/chat              → OpenAI GPT-4o-mini (streaming)
+       ├─ /api/chat              → GPT-4o-mini (streaming) + retrieved product context (RAG)
        ├─ /api/marketing         → OpenAI GPT-4o-mini (structured output)
        ├─ /api/insights          → OpenAI GPT-4o-mini (streaming)
        ├─ /api/content-variants  → OpenAI GPT-4o-mini (streaming)
-       ├─ /api/recommendations   → OpenAI GPT-4o-mini (streaming)
+       ├─ /api/recommendations   → SQL-backed recommendation signals + RAG evidence retrieval + GPT insight synthesis
        ├─ /api/email-campaign    → OpenAI GPT-4o-mini (streaming)
+       ├─ /api/webhooks/payment  → Secure confirmed-payment order writes
        ├─ /api/qualify-lead      → OpenAI GPT-4o-mini + tool-calling
        ├─ /api/generate-image    → HuggingFace FLUX.1-schnell
        └─ /api/enhance-prompt    → Gemini 2.5 Flash Lite

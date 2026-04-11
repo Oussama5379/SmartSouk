@@ -91,6 +91,11 @@ export interface Session {
   time_spent_ms: number
   user_type: "guest" | "customer"
   user_id?: string
+  utm_source?: string
+  utm_medium?: string
+  utm_campaign?: string
+  utm_term?: string
+  utm_content?: string
 }
 
 export interface ProductEvent {

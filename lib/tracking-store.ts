@@ -46,6 +46,15 @@ function toNumber(value: unknown): number {
   return 0
 }
 
+function normalizeLimit(value: number | undefined, fallback: number): number {
+  const normalized = Math.floor(toNumber(value))
+  if (normalized <= 0) {
+    return fallback
+  }
+
+  return Math.min(normalized, 20000)
+}
+
 function normalizeUserType(value: unknown): "guest" | "customer" {
   return value === "customer" ? "customer" : "guest"
 }
@@ -59,6 +68,11 @@ interface SessionRow {
   timestamp: string | number
   user_type: string
   user_id: string | null
+  utm_source: string | null
+  utm_medium: string | null
+  utm_campaign: string | null
+  utm_term: string | null
+  utm_content: string | null
   pages_visited: string[] | null
   time_spent_ms: string | number | null
 }
@@ -92,10 +106,15 @@ async function ensureTrackingSchema() {
       await db`
         CREATE TABLE IF NOT EXISTS sessions (
           id TEXT PRIMARY KEY,
-          started_at BIGINT NOT NULL,
+          started_at BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT),
           user_type TEXT NOT NULL DEFAULT 'guest',
           user_id TEXT,
-          last_activity_at BIGINT NOT NULL
+          utm_source TEXT,
+          utm_medium TEXT,
+          utm_campaign TEXT,
+          utm_term TEXT,
+          utm_content TEXT,
+          last_activity_at BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT)
         );
       `
 
@@ -108,7 +127,7 @@ async function ensureTrackingSchema() {
           time_spent_ms INTEGER NOT NULL DEFAULT 0,
           scroll_depth INTEGER NOT NULL DEFAULT 0,
           page TEXT,
-          timestamp BIGINT NOT NULL,
+          timestamp BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT),
           metadata JSONB NOT NULL DEFAULT '{}'::jsonb
         );
       `
@@ -121,8 +140,33 @@ async function ensureTrackingSchema() {
           product_id TEXT NOT NULL,
           quantity INTEGER NOT NULL DEFAULT 1,
           price_paid NUMERIC NOT NULL DEFAULT 0,
-          timestamp BIGINT NOT NULL
+          timestamp BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT)
         );
+      `
+
+      await db`
+        ALTER TABLE sessions
+        ADD COLUMN IF NOT EXISTS utm_source TEXT,
+        ADD COLUMN IF NOT EXISTS utm_medium TEXT,
+        ADD COLUMN IF NOT EXISTS utm_campaign TEXT,
+        ADD COLUMN IF NOT EXISTS utm_term TEXT,
+        ADD COLUMN IF NOT EXISTS utm_content TEXT;
+      `
+
+      await db`
+        ALTER TABLE sessions
+        ALTER COLUMN started_at SET DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT),
+        ALTER COLUMN last_activity_at SET DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT);
+      `
+
+      await db`
+        ALTER TABLE product_events
+        ALTER COLUMN timestamp SET DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT);
+      `
+
+      await db`
+        ALTER TABLE orders
+        ALTER COLUMN timestamp SET DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT);
       `
 
       await db`
@@ -147,21 +191,53 @@ async function ensureTrackingSchema() {
 
 async function upsertSession(params: {
   sessionId: string
-  timestamp: number
   userType: "guest" | "customer"
   userId?: string
+  utmSource?: string
+  utmMedium?: string
+  utmCampaign?: string
+  utmTerm?: string
+  utmContent?: string
 }): Promise<Session> {
   const db = requireSql()
-  const { sessionId, timestamp, userType, userId } = params
+  const { sessionId, userType, userId, utmSource, utmMedium, utmCampaign, utmTerm, utmContent } = params
 
   await db`
-    INSERT INTO sessions (id, started_at, user_type, user_id, last_activity_at)
-    VALUES (${sessionId}, ${timestamp}, ${userType}, ${userId ?? null}, ${timestamp})
+    INSERT INTO sessions (
+      id,
+      user_type,
+      user_id,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_term,
+      utm_content,
+      last_activity_at
+    )
+    VALUES (
+      ${sessionId},
+      ${userType},
+      ${userId ?? null},
+      ${utmSource ?? null},
+      ${utmMedium ?? null},
+      ${utmCampaign ?? null},
+      ${utmTerm ?? null},
+      ${utmContent ?? null},
+      ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT)
+    )
     ON CONFLICT (id) DO UPDATE
       SET
         user_type = COALESCE(EXCLUDED.user_type, sessions.user_type),
         user_id = COALESCE(EXCLUDED.user_id, sessions.user_id),
-        last_activity_at = GREATEST(sessions.last_activity_at, EXCLUDED.last_activity_at);
+        utm_source = COALESCE(sessions.utm_source, EXCLUDED.utm_source),
+        utm_medium = COALESCE(sessions.utm_medium, EXCLUDED.utm_medium),
+        utm_campaign = COALESCE(sessions.utm_campaign, EXCLUDED.utm_campaign),
+        utm_term = COALESCE(sessions.utm_term, EXCLUDED.utm_term),
+        utm_content = COALESCE(sessions.utm_content, EXCLUDED.utm_content),
+        last_activity_at = GREATEST(
+          sessions.last_activity_at,
+          ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT)
+        );
   `
 
   const [row] = (await db`
@@ -170,6 +246,11 @@ async function upsertSession(params: {
       s.started_at AS timestamp,
       s.user_type,
       s.user_id,
+      s.utm_source,
+      s.utm_medium,
+      s.utm_campaign,
+      s.utm_term,
+      s.utm_content,
       COALESCE(
         ARRAY(
           SELECT DISTINCT pe.page
@@ -185,17 +266,32 @@ async function upsertSession(params: {
     FROM sessions s
     LEFT JOIN product_events pe ON pe.session_id = s.id
     WHERE s.id = ${sessionId}
-    GROUP BY s.id, s.started_at, s.user_type, s.user_id, s.last_activity_at
+    GROUP BY
+      s.id,
+      s.started_at,
+      s.user_type,
+      s.user_id,
+      s.utm_source,
+      s.utm_medium,
+      s.utm_campaign,
+      s.utm_term,
+      s.utm_content,
+      s.last_activity_at
     LIMIT 1;
   `) as SessionRow[]
 
   return {
     id: row?.id ?? sessionId,
-    timestamp: toNumber(row?.timestamp ?? timestamp),
+    timestamp: toNumber(row?.timestamp ?? Date.now()),
     pages_visited: Array.isArray(row?.pages_visited) ? row.pages_visited : [],
     time_spent_ms: toNumber(row?.time_spent_ms),
     user_type: normalizeUserType(row?.user_type ?? userType),
     user_id: row?.user_id ?? undefined,
+    utm_source: row?.utm_source ?? undefined,
+    utm_medium: row?.utm_medium ?? undefined,
+    utm_campaign: row?.utm_campaign ?? undefined,
+    utm_term: row?.utm_term ?? undefined,
+    utm_content: row?.utm_content ?? undefined,
   }
 }
 
@@ -238,61 +334,29 @@ export function isTrackingConfigured(): boolean {
 export async function trackEvent(payload: TrackEventPayload): Promise<{
   session?: Session
   event?: TrackedProductEvent
-  order?: Order
 }> {
   const db = requireSql()
   await ensureTrackingSchema()
 
-  const timestamp = toNumber(payload.timestamp) || Date.now()
   const metadata = payload.metadata ?? {}
   const sessionId = payload.session_id.trim()
+  if (!sessionId) {
+    throw new Error("session_id is required for tracking events.")
+  }
+
   const userType = normalizeUserType(metadata.user_type)
   const userId = metadata.user_id
 
   const session = await upsertSession({
     sessionId,
-    timestamp,
     userType,
     userId,
+    utmSource: metadata.utm_source,
+    utmMedium: metadata.utm_medium,
+    utmCampaign: metadata.utm_campaign,
+    utmTerm: metadata.utm_term,
+    utmContent: metadata.utm_content,
   })
-
-  if (payload.event_type === "purchase") {
-    if (!payload.product_id) {
-      throw new Error("product_id is required for purchase events.")
-    }
-
-    const order: Order = {
-      id: createId("ord"),
-      session_id: sessionId,
-      user_id: userId,
-      product_id: payload.product_id,
-      quantity: Math.max(1, Math.floor(toNumber(metadata.quantity) || 1)),
-      price_paid: Math.max(0, toNumber(metadata.price_paid)),
-      timestamp,
-    }
-
-    await db`
-      INSERT INTO orders (id, session_id, user_id, product_id, quantity, price_paid, timestamp)
-      VALUES (
-        ${order.id},
-        ${order.session_id},
-        ${order.user_id ?? null},
-        ${order.product_id},
-        ${order.quantity},
-        ${order.price_paid},
-        ${order.timestamp}
-      );
-    `
-
-    await cacheSessionSignals({
-      sessionId,
-      eventType: payload.event_type,
-      productId: payload.product_id,
-      page: metadata.page,
-    })
-
-    return { session, order }
-  }
 
   if (payload.event_type === "session_start") {
     await cacheSessionSignals({
@@ -304,18 +368,8 @@ export async function trackEvent(payload: TrackEventPayload): Promise<{
     return { session }
   }
 
-  const event: TrackedProductEvent = {
-    id: createId("evt"),
-    session_id: sessionId,
-    product_id: payload.product_id ?? null,
-    event_type: payload.event_type,
-    time_spent_ms: Math.max(0, toNumber(metadata.time_spent_ms)),
-    scroll_depth: Math.max(0, toNumber(metadata.scroll_depth)),
-    timestamp,
-    page: metadata.page,
-  }
-
-  await db`
+  const eventId = createId("evt")
+  const [insertedEvent] = (await db`
     INSERT INTO product_events (
       id,
       session_id,
@@ -324,21 +378,31 @@ export async function trackEvent(payload: TrackEventPayload): Promise<{
       time_spent_ms,
       scroll_depth,
       page,
-      timestamp,
       metadata
     )
     VALUES (
-      ${event.id},
-      ${event.session_id},
-      ${event.product_id},
-      ${event.event_type},
-      ${event.time_spent_ms},
-      ${event.scroll_depth},
-      ${event.page ?? null},
-      ${event.timestamp},
+      ${eventId},
+      ${sessionId},
+      ${payload.product_id ?? null},
+      ${payload.event_type},
+      ${Math.max(0, toNumber(metadata.time_spent_ms))},
+      ${Math.max(0, toNumber(metadata.scroll_depth))},
+      ${metadata.page ?? null},
       ${JSON.stringify(metadata)}::jsonb
-    );
-  `
+    )
+    RETURNING timestamp;
+  `) as Array<{ timestamp: string | number }>
+
+  const event: TrackedProductEvent = {
+    id: eventId,
+    session_id: sessionId,
+    product_id: payload.product_id ?? null,
+    event_type: payload.event_type,
+    time_spent_ms: Math.max(0, toNumber(metadata.time_spent_ms)),
+    scroll_depth: Math.max(0, toNumber(metadata.scroll_depth)),
+    timestamp: toNumber(insertedEvent?.timestamp ?? Date.now()),
+    page: metadata.page,
+  }
 
   await cacheSessionSignals({
     sessionId,
@@ -348,6 +412,63 @@ export async function trackEvent(payload: TrackEventPayload): Promise<{
   })
 
   return { session, event }
+}
+
+export interface ConfirmedPaymentOrderInput {
+  session_id: string
+  user_id?: string
+  product_id: string
+  quantity: number
+  price_paid: number
+}
+
+export async function recordConfirmedPaymentOrder(payload: ConfirmedPaymentOrderInput): Promise<Order> {
+  const db = requireSql()
+  await ensureTrackingSchema()
+
+  const sessionId = payload.session_id.trim()
+  if (!sessionId) {
+    throw new Error("session_id is required for payment confirmation.")
+  }
+
+  const productId = payload.product_id.trim()
+  if (!productId) {
+    throw new Error("product_id is required for payment confirmation.")
+  }
+
+  const userId = payload.user_id?.trim()
+  const quantity = Math.max(1, Math.floor(toNumber(payload.quantity) || 1))
+  const pricePaid = Math.max(0, toNumber(payload.price_paid))
+
+  await upsertSession({
+    sessionId,
+    userType: userId ? "customer" : "guest",
+    userId,
+  })
+
+  const orderId = createId("ord")
+  const [insertedOrder] = (await db`
+    INSERT INTO orders (id, session_id, user_id, product_id, quantity, price_paid)
+    VALUES (
+      ${orderId},
+      ${sessionId},
+      ${userId ?? null},
+      ${productId},
+      ${quantity},
+      ${pricePaid}
+    )
+    RETURNING timestamp;
+  `) as Array<{ timestamp: string | number }>
+
+  return {
+    id: orderId,
+    session_id: sessionId,
+    user_id: userId,
+    product_id: productId,
+    quantity,
+    price_paid: pricePaid,
+    timestamp: toNumber(insertedOrder?.timestamp),
+  }
 }
 
 async function getTrackingStats(): Promise<TrackingStats> {
@@ -380,18 +501,57 @@ async function getTrackingStats(): Promise<TrackingStats> {
     ) session_durations;
   `) as Array<{ avg_duration_ms: string | number | null }>
 
+  const [cartRow] = (await db`
+    WITH cart_sessions AS (
+      SELECT DISTINCT session_id
+      FROM product_events
+      WHERE event_type = 'add_to_cart'
+    )
+    SELECT
+      COUNT(*)::INT AS carts_started,
+      COUNT(*) FILTER (
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM orders o
+          WHERE o.session_id = cart_sessions.session_id
+        )
+      )::INT AS carts_abandoned
+    FROM cart_sessions;
+  `) as Array<{ carts_started: string | number; carts_abandoned: string | number }>
+
+  const totalSessions = toNumber(sessionsRow?.count)
+  const totalRevenue = toNumber(ordersRow?.revenue)
+  const cartsStarted = toNumber(cartRow?.carts_started)
+  const cartsAbandoned = toNumber(cartRow?.carts_abandoned)
+
   return {
-    totalSessions: toNumber(sessionsRow?.count),
+    totalSessions,
     totalEvents: toNumber(eventsRow?.count),
     totalOrders: toNumber(ordersRow?.count),
-    totalRevenue: toNumber(ordersRow?.revenue),
+    totalRevenue,
     avgSessionDuration: Math.round(toNumber(avgDurationRow?.avg_duration_ms) / 1000),
+    revenuePerVisitor: totalSessions > 0 ? Number((totalRevenue / totalSessions).toFixed(2)) : 0,
+    cartAbandonmentRate:
+      cartsStarted > 0 ? Number(((cartsAbandoned / cartsStarted) * 100).toFixed(1)) : 0,
+    cartsStarted,
+    cartsAbandoned,
   }
 }
 
-export async function getTrackingDashboardData(): Promise<TrackingDashboardData> {
+export interface TrackingDashboardQueryOptions {
+  sessionLimit?: number
+  eventLimit?: number
+  orderLimit?: number
+}
+
+export async function getTrackingDashboardData(
+  options: TrackingDashboardQueryOptions = {}
+): Promise<TrackingDashboardData> {
   const db = requireSql()
   await ensureTrackingSchema()
+  const sessionLimit = normalizeLimit(options.sessionLimit, 100)
+  const eventLimit = normalizeLimit(options.eventLimit, 200)
+  const orderLimit = normalizeLimit(options.orderLimit, 200)
 
   const [stats, rawSessionRows, rawEventRows, rawOrderRows] = await Promise.all([
     getTrackingStats(),
@@ -401,6 +561,11 @@ export async function getTrackingDashboardData(): Promise<TrackingDashboardData>
         s.started_at AS timestamp,
         s.user_type,
         s.user_id,
+        s.utm_source,
+        s.utm_medium,
+        s.utm_campaign,
+        s.utm_term,
+        s.utm_content,
         COALESCE(
           ARRAY(
             SELECT DISTINCT pe.page
@@ -415,9 +580,19 @@ export async function getTrackingDashboardData(): Promise<TrackingDashboardData>
         ) AS time_spent_ms
       FROM sessions s
       LEFT JOIN product_events pe ON pe.session_id = s.id
-      GROUP BY s.id, s.started_at, s.user_type, s.user_id, s.last_activity_at
+      GROUP BY
+        s.id,
+        s.started_at,
+        s.user_type,
+        s.user_id,
+        s.utm_source,
+        s.utm_medium,
+        s.utm_campaign,
+        s.utm_term,
+        s.utm_content,
+        s.last_activity_at
       ORDER BY s.started_at DESC
-      LIMIT 100;
+      LIMIT ${sessionLimit};
     `,
     db`
       SELECT
@@ -431,7 +606,7 @@ export async function getTrackingDashboardData(): Promise<TrackingDashboardData>
         page
       FROM product_events
       ORDER BY timestamp DESC
-      LIMIT 200;
+      LIMIT ${eventLimit};
     `,
     db`
       SELECT
@@ -444,7 +619,7 @@ export async function getTrackingDashboardData(): Promise<TrackingDashboardData>
         timestamp
       FROM orders
       ORDER BY timestamp DESC
-      LIMIT 200;
+      LIMIT ${orderLimit};
     `,
   ])
 
@@ -459,6 +634,11 @@ export async function getTrackingDashboardData(): Promise<TrackingDashboardData>
     time_spent_ms: toNumber(row.time_spent_ms),
     user_type: normalizeUserType(row.user_type),
     user_id: row.user_id ?? undefined,
+    utm_source: row.utm_source ?? undefined,
+    utm_medium: row.utm_medium ?? undefined,
+    utm_campaign: row.utm_campaign ?? undefined,
+    utm_term: row.utm_term ?? undefined,
+    utm_content: row.utm_content ?? undefined,
   }))
 
   const events: TrackedProductEvent[] = eventRows.map((row) => ({

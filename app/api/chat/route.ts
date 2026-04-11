@@ -1,31 +1,28 @@
 import { convertToModelMessages, streamText, type UIMessage } from "ai"
-import { getProductById, products } from "@/lib/mock-data"
+import { getProductById } from "@/lib/mock-data"
+import {
+  buildCatalogRetrievalQuery,
+  formatRetrievedCatalogContext,
+  retrieveCatalogProducts,
+} from "@/lib/product-rag"
 import { getSessionSignals } from "@/lib/tracking-store"
-
-const inventoryContext = products
-  .map(
-    (product) =>
-      `- ${product.name} (${product.category}): ${product.price_tnd} TND - ${product.stock_status.replace("_", " ")} - ${product.description}`
-  )
-  .join("\n")
 
 const baseSystemPrompt = `You are a friendly, highly persuasive Tunisian sales assistant for SmartSouk, a Tunisian artisanal concept store.
 
-You have access to this inventory:
-${inventoryContext}
+Use the RETRIEVED CATALOG CONTEXT provided in this prompt as your source of truth.
 
 Your job is to:
 1. Greet customers warmly (use "Marhaba" occasionally)
-2. Qualify their needs by asking about their budget, the occasion, or what they're looking for
-3. Recommend 1-2 specific items from the inventory based on their answers
+2. Qualify their needs by asking about their budget, the occasion, what they're looking for, and sector when relevant
+3. Recommend 1-2 specific items from the retrieved catalog context based on their answers
 4. Highlight the authenticity and craftsmanship of Tunisian products
-5. Be concise, warm, and occasionally use Tunisian expressions
+5. Be concise, warm, and occasionally use Tunisian expressions (2-3 sentences usually)
 
 Important guidelines:
-- Only recommend products that are "in stock" or "low stock"
-- If a product is "out of stock", mention it's currently unavailable but suggest alternatives
+- Never invent products, prices, or stock states not present in RETRIEVED CATALOG CONTEXT
+- Only recommend products that are "in stock" or "low stock" unless user explicitly asks about unavailable items
+- If a product in context is "out of stock", mention it's currently unavailable and suggest alternatives from context
 - Always mention prices in TND (Tunisian Dinar)
-- Keep responses friendly but brief - no more than 2-3 sentences usually
 - If asked about shipping, say you ship worldwide with tracking`
 
 interface ChatRouteBody {
@@ -33,6 +30,26 @@ interface ChatRouteBody {
   session_id?: string
   current_page_url?: string
   active_product_id?: string
+}
+
+function getMessageText(message: Pick<UIMessage, "parts">): string {
+  if (!Array.isArray(message.parts)) {
+    return ""
+  }
+
+  return message.parts
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .join("")
+    .trim()
+}
+
+function getRecentUserIntent(messages: UIMessage[], limit = 3): string {
+  const userTurns = messages
+    .filter((message) => message.role === "user")
+    .map((message) => getMessageText(message))
+    .filter((text) => text.length > 0)
+
+  return userTurns.slice(-limit).join(" ")
 }
 
 function getProductNamesByIds(productIds: string[]): string[] {
@@ -98,12 +115,28 @@ export async function POST(req: Request) {
       viewedProductIds,
       lastTrackedPage: lastPage,
     })
+    const retrievalQuery = buildCatalogRetrievalQuery({
+      conversationText: getRecentUserIntent(body.messages),
+      activeProductId,
+      viewedProductIds,
+      currentPageUrl: currentPageUrl || undefined,
+      lastTrackedPage: lastPage,
+    })
+    const retrievedCatalog = retrieveCatalogProducts({
+      query: retrievalQuery,
+      activeProductId,
+      viewedProductIds,
+      limit: 4,
+    })
+    const ragCatalogContext = formatRetrievedCatalogContext(retrievedCatalog)
+    const systemPromptSections = [baseSystemPrompt, `RETRIEVED CATALOG CONTEXT:\n${ragCatalogContext}`]
+    if (personalizedSystemPrompt) {
+      systemPromptSections.push(`CUSTOMER CONTEXT:\n${personalizedSystemPrompt}`)
+    }
 
     const result = streamText({
       model: "openai/gpt-4o-mini",
-      system: personalizedSystemPrompt
-        ? `${baseSystemPrompt}\n\nCustomer context:\n${personalizedSystemPrompt}`
-        : baseSystemPrompt,
+      system: systemPromptSections.join("\n\n"),
       messages: await convertToModelMessages(body.messages),
     })
 
