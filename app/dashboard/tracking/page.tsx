@@ -1,55 +1,110 @@
-'use client'
+"use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { useEffect, useState } from "react"
-import { Activity, Users, ShoppingCart, TrendingUp, Eye, Clock, Loader2 } from "lucide-react"
-import { mockSessions, mockProductEvents, mockOrders, products } from "@/lib/mock-data"
+import { Clock, Eye, Loader2, ShoppingCart, TrendingUp, Users } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import type { Order, Session } from "@/lib/mock-data"
+import { products } from "@/lib/mock-data"
+import type { TrackedProductEvent, TrackingStats } from "@/lib/tracking-types"
+
+interface TrackingApiResponse {
+  stats: TrackingStats
+  sessions: Session[]
+  events: TrackedProductEvent[]
+  orders: Order[]
+  error?: string
+}
+
+const emptyStats: TrackingStats = {
+  totalSessions: 0,
+  totalEvents: 0,
+  totalOrders: 0,
+  totalRevenue: 0,
+  avgSessionDuration: 0,
+}
 
 export default function TrackingDashboard() {
-  const [stats, setStats] = useState({
-    totalSessions: 0,
-    totalEvents: 0,
-    totalOrders: 0,
-    totalRevenue: 0,
-    avgSessionDuration: 0,
-  })
+  const [stats, setStats] = useState<TrackingStats>(emptyStats)
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [events, setEvents] = useState<TrackedProductEvent[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const loadTrackingData = async () => {
+    setLoading(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch("/api/track", {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      })
+
+      const payload = (await response.json()) as TrackingApiResponse
+      if (!response.ok) {
+        setErrorMessage(payload.error ?? "Failed to load tracking data")
+        return
+      }
+
+      setStats(payload.stats ?? emptyStats)
+      setSessions(Array.isArray(payload.sessions) ? payload.sessions : [])
+      setEvents(Array.isArray(payload.events) ? payload.events : [])
+      setOrders(Array.isArray(payload.orders) ? payload.orders : [])
+    } catch {
+      setErrorMessage("Failed to load tracking data")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    // Calculate statistics from mock data
-    const totalRevenue = mockOrders.reduce((sum, o) => sum + o.price_paid, 0)
-    const avgSessionDuration =
-      mockSessions.length > 0
-        ? mockSessions.reduce((sum, s) => sum + s.time_spent_ms, 0) / mockSessions.length / 1000 // Convert to seconds
-        : 0
-
-    setStats({
-      totalSessions: mockSessions.length,
-      totalEvents: mockProductEvents.length,
-      totalOrders: mockOrders.length,
-      totalRevenue,
-      avgSessionDuration: Math.round(avgSessionDuration),
-    })
-    setLoading(false)
+    void loadTrackingData()
   }, [])
 
-  const getProductName = (id: string) => {
-    return products.find((p) => p.id === id)?.name || "Unknown Product"
+  const getProductName = (productId: string | null) => {
+    if (!productId) {
+      return "General Session Event"
+    }
+
+    return products.find((product) => product.id === productId)?.name || "Unknown Product"
+  }
+
+  const productInteractionEvents = events.filter((event) => event.product_id)
+
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">User & Session Tracking</h1>
-        <p className="text-muted-foreground mt-2">
-          Real-time visitor behavior, product interest, and purchase analytics
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">User & Session Tracking</h1>
+          <p className="text-muted-foreground mt-2">
+            Real visitor behavior, product interest, and purchase analytics
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => void loadTrackingData()}>
+          Refresh
+        </Button>
       </div>
 
-      {/* Key Metrics */}
+      {errorMessage && (
+        <Card className="border-destructive/40">
+          <CardContent className="pt-6">
+            <p className="text-sm text-destructive">{errorMessage}</p>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -73,7 +128,7 @@ export default function TrackingDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalEvents}</div>
-            <p className="text-xs text-muted-foreground mt-1">Product interactions</p>
+            <p className="text-xs text-muted-foreground mt-1">Tracked interactions</p>
           </CardContent>
         </Card>
 
@@ -117,7 +172,6 @@ export default function TrackingDashboard() {
         </Card>
       </div>
 
-      {/* Sessions */}
       <Card>
         <CardHeader>
           <CardTitle>Active Sessions</CardTitle>
@@ -125,7 +179,10 @@ export default function TrackingDashboard() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {mockSessions.map((session) => (
+            {sessions.length === 0 && (
+              <p className="text-sm text-muted-foreground">No sessions tracked yet.</p>
+            )}
+            {sessions.map((session) => (
               <div key={session.id} className="p-3 rounded-lg border bg-gray-50">
                 <div className="flex items-start justify-between mb-2">
                   <div>
@@ -141,6 +198,11 @@ export default function TrackingDashboard() {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap mb-2">
+                  {session.pages_visited.length === 0 && (
+                    <Badge variant="outline" className="text-xs">
+                      /
+                    </Badge>
+                  )}
                   {session.pages_visited.map((page) => (
                     <Badge key={page} variant="outline" className="text-xs">
                       {page}
@@ -148,7 +210,8 @@ export default function TrackingDashboard() {
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Duration: {Math.round(session.time_spent_ms / 1000)}s • {new Date(session.timestamp).toLocaleString()}
+                  Duration: {Math.round(session.time_spent_ms / 1000)}s •{" "}
+                  {new Date(session.timestamp).toLocaleString()}
                 </p>
               </div>
             ))}
@@ -156,15 +219,17 @@ export default function TrackingDashboard() {
         </CardContent>
       </Card>
 
-      {/* Product Interactions */}
       <Card>
         <CardHeader>
           <CardTitle>Product Interactions</CardTitle>
-          <CardDescription>Views, clicks, and engagement metrics by product</CardDescription>
+          <CardDescription>Views, clicks, and engagement by product</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {mockProductEvents.map((event) => (
+            {productInteractionEvents.length === 0 && (
+              <p className="text-sm text-muted-foreground">No product interactions tracked yet.</p>
+            )}
+            {productInteractionEvents.map((event) => (
               <div key={event.id} className="p-3 rounded-lg border flex items-start justify-between">
                 <div className="flex-1">
                   <p className="font-semibold text-sm">{getProductName(event.product_id)}</p>
@@ -177,7 +242,8 @@ export default function TrackingDashboard() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {event.time_spent_ms > 0 && `Time spent: ${Math.round(event.time_spent_ms / 1000)}s`}
+                    {event.time_spent_ms > 0 &&
+                      `Time spent: ${Math.round(event.time_spent_ms / 1000)}s`}
                   </p>
                 </div>
                 <span className="text-xs text-muted-foreground">
@@ -189,7 +255,6 @@ export default function TrackingDashboard() {
         </CardContent>
       </Card>
 
-      {/* Conversions */}
       <Card className="border-green-200 bg-gradient-to-br from-green-50 to-transparent">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -200,7 +265,10 @@ export default function TrackingDashboard() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {mockOrders.map((order) => (
+            {orders.length === 0 && (
+              <p className="text-sm text-muted-foreground">No orders tracked yet.</p>
+            )}
+            {orders.map((order) => (
               <div key={order.id} className="p-3 rounded-lg border bg-white">
                 <div className="flex items-start justify-between mb-2">
                   <div>
@@ -220,7 +288,6 @@ export default function TrackingDashboard() {
         </CardContent>
       </Card>
 
-      {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader>

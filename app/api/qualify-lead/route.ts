@@ -1,50 +1,145 @@
-import { streamText, tool } from 'ai';
-import { z } from 'zod';
+import { generateText, tool } from "ai"
+import { z } from "zod"
+import { getProductById } from "@/lib/mock-data"
+import { getSessionSignals } from "@/lib/tracking-store"
+import type { LeadQualificationResult } from "@/lib/tracking-types"
 
-const leadData = {
-  name: '',
-  industry: '',
-  budget: '',
-  challenges: '',
-  timeline: '',
-  interest: '',
-};
+interface ConversationTurn {
+  role: "user" | "assistant"
+  content: string
+}
+
+interface QualifyLeadBody {
+  conversationHistory?: ConversationTurn[]
+  session_id?: string
+  current_page_url?: string
+  active_product_id?: string
+}
+
+function formatConversationHistory(conversationHistory: ConversationTurn[]): string {
+  return conversationHistory
+    .filter((turn) => turn.content.trim().length > 0)
+    .map((turn) => `${turn.role === "assistant" ? "Assistant" : "User"}: ${turn.content.trim()}`)
+    .join("\n")
+}
+
+function buildSessionContext(params: {
+  currentPageUrl?: string
+  activeProductId?: string
+  viewedProductIds: string[]
+  lastTrackedPage: string | null
+}): string {
+  const contextLines: string[] = []
+
+  if (params.currentPageUrl) {
+    contextLines.push(`Current page URL: ${params.currentPageUrl}`)
+  } else if (params.lastTrackedPage) {
+    contextLines.push(`Last tracked page: ${params.lastTrackedPage}`)
+  }
+
+  if (params.activeProductId) {
+    const activeProduct = getProductById(params.activeProductId)
+    if (activeProduct) {
+      contextLines.push(`Current focused product: ${activeProduct.name}`)
+    }
+  }
+
+  if (params.viewedProductIds.length > 0) {
+    const viewedProducts = params.viewedProductIds
+      .map((productId) => getProductById(productId)?.name)
+      .filter((name): name is string => typeof name === "string")
+
+    if (viewedProducts.length > 0) {
+      contextLines.push(`Viewed products in this session: ${viewedProducts.join(", ")}`)
+    }
+  }
+
+  return contextLines.length > 0 ? contextLines.join("\n") : "No tracked browsing context available."
+}
 
 export async function POST(req: Request) {
-  const { conversationHistory } = await req.json();
+  try {
+    const body = (await req.json()) as QualifyLeadBody
 
-  const result = streamText({
-    model: 'openai/gpt-4o-mini',
-    system: `You are a brilliant sales AI for SmartSouk - a platform selling authentic Tunisian handcrafted products and services.
-Your goal is to:
-1. Qualify the lead by understanding their needs, budget, and timeline
-2. Score them 1-10 based on fit and urgency
-3. Recommend the perfect product/service from our catalog
-4. Suggest next steps (meeting, email, follow-up)
+    if (!Array.isArray(body.conversationHistory) || body.conversationHistory.length < 2) {
+      return Response.json(
+        { error: "conversationHistory with at least two turns is required" },
+        { status: 400 }
+      )
+    }
 
-Be conversational, empathetic, and insightful. Ask smart follow-up questions to understand their real pain points.
-Always think about personalized recommendations based on their industry and needs.`,
-    messages: conversationHistory,
-    tools: {
-      scoreAndRecommend: tool({
-        description: 'Score the lead and generate recommendations',
-        inputSchema: z.object({
-          leadScore: z.number().min(1).max(10),
-          recommendedProducts: z.array(z.string()),
-          nextSteps: z.array(z.string()),
-          reasoning: z.string(),
+    const conversationHistory = body.conversationHistory.filter(
+      (turn): turn is ConversationTurn =>
+        (turn.role === "user" || turn.role === "assistant") && typeof turn.content === "string"
+    )
+
+    if (conversationHistory.length < 2) {
+      return Response.json({ error: "Not enough valid conversation turns" }, { status: 400 })
+    }
+
+    const sessionId = typeof body.session_id === "string" ? body.session_id.trim() : ""
+    const activeProductId =
+      typeof body.active_product_id === "string" ? body.active_product_id.trim() : undefined
+    const currentPageUrl =
+      typeof body.current_page_url === "string" ? body.current_page_url.trim() : undefined
+
+    const { viewedProductIds, lastPage } = sessionId
+      ? await getSessionSignals(sessionId)
+      : { viewedProductIds: [], lastPage: null }
+
+    const sessionContext = buildSessionContext({
+      currentPageUrl,
+      activeProductId,
+      viewedProductIds,
+      lastTrackedPage: lastPage,
+    })
+
+    const result = await generateText({
+      model: "openai/gpt-4o-mini",
+      system: `You are a sales qualification assistant for SmartSouk.
+Your task is to score this lead and recommend the best next action.
+You must call scoreAndRecommend exactly once with a pragmatic sales assessment.`,
+      prompt: `Conversation transcript:
+${formatConversationHistory(conversationHistory)}
+
+Tracked context:
+${sessionContext}
+
+Based on the transcript + context, qualify the lead now.`,
+      tools: {
+        scoreAndRecommend: tool({
+          description: "Score the lead and return personalized recommendations and next steps.",
+          inputSchema: z.object({
+            score: z.number().min(1).max(10),
+            products: z.array(z.string()).min(1).max(3),
+            actions: z.array(z.string()).min(1).max(3),
+            analysis: z.string().min(1),
+          }),
+          execute: async (input) => input,
         }),
-        execute: async (input) => {
-          return {
-            score: input.leadScore,
-            products: input.recommendedProducts,
-            actions: input.nextSteps,
-            analysis: input.reasoning,
-          };
-        },
-      }),
-    },
-  });
+      },
+      toolChoice: {
+        type: "tool",
+        toolName: "scoreAndRecommend",
+      },
+    })
 
-  return result.toTextStreamResponse();
+    const scoreResult = result.toolResults.find(
+      (toolResult) => toolResult.toolName === "scoreAndRecommend"
+    )
+
+    if (!scoreResult) {
+      return Response.json({ error: "Lead qualification tool did not return a result" }, { status: 500 })
+    }
+
+    const output = scoreResult.output as Omit<LeadQualificationResult, "summary">
+    const summary = `Lead score: ${output.score}/10. Recommended products: ${output.products.join(", ")}. Next step: ${output.actions[0]}.`
+
+    return Response.json({
+      ...output,
+      summary,
+    } satisfies LeadQualificationResult)
+  } catch {
+    return Response.json({ error: "Lead qualification failed" }, { status: 500 })
+  }
 }

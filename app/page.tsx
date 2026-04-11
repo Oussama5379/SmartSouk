@@ -1,13 +1,33 @@
-import { products } from "@/lib/mock-data"
+"use client"
+
+import Link from "next/link"
+import { useRef, useState } from "react"
+import { ArrowRight, Leaf, Package, Sparkles, Star, Wand2 } from "lucide-react"
+import { ChatWidget } from "@/components/chat-widget"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowRight, Leaf, Package, Sparkles, Star, Wand2 } from "lucide-react"
-import Link from "next/link"
-import { ChatWidget } from "@/components/chat-widget"
+import { useSessionTracking } from "@/hooks/use-session-tracking"
+import { products } from "@/lib/mock-data"
 
 export default function StorefrontPage() {
+  const { sessionId, currentPath, trackProductEvent, trackChatOpen } = useSessionTracking()
+  const [focusedProductId, setFocusedProductId] = useState<string | null>(null)
+  const viewedProductsRef = useRef<Set<string>>(new Set())
   const featuredProducts = products.filter(p => p.stock_status !== "out_of_stock").slice(0, 4)
+
+  const handleProductHover = (productId: string) => {
+    setFocusedProductId(productId)
+    if (!viewedProductsRef.current.has(productId)) {
+      viewedProductsRef.current.add(productId)
+      trackProductEvent(productId, "product_view")
+    }
+  }
+
+  const handleProductClick = (productId: string) => {
+    setFocusedProductId(productId)
+    trackProductEvent(productId, "click")
+  }
   
   return (
     <div className="min-h-screen bg-background">
@@ -127,7 +147,12 @@ export default function StorefrontPage() {
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {featuredProducts.map((product) => (
-              <Card key={product.id} className="group overflow-hidden">
+              <Card
+                key={product.id}
+                className="group overflow-hidden cursor-pointer"
+                onMouseEnter={() => handleProductHover(product.id)}
+                onClick={() => handleProductClick(product.id)}
+              >
                 <div className="aspect-square bg-muted relative">
                   <div className="absolute inset-0 flex items-center justify-center text-4xl text-muted-foreground/30">
                     {product.category === "ceramics" && "🏺"}
@@ -155,7 +180,16 @@ export default function StorefrontPage() {
                   </p>
                   <div className="mt-3 flex items-center justify-between">
                     <span className="text-lg font-bold">{product.price_tnd} TND</span>
-                    <Button size="sm">Add to Cart</Button>
+                    <Button
+                      size="sm"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setFocusedProductId(product.id)
+                        trackProductEvent(product.id, "add_to_cart")
+                      }}
+                    >
+                      Add to Cart
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -207,7 +241,12 @@ export default function StorefrontPage() {
       </footer>
 
       {/* Chat Widget */}
-      <ChatWidget />
+      <ChatWidget
+        sessionId={sessionId}
+        currentPageUrl={currentPath}
+        activeProductId={focusedProductId}
+        onOpen={trackChatOpen}
+      />
     </div>
   )
 }

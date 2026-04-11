@@ -1,96 +1,139 @@
-import { mockSessions, mockProductEvents, mockOrders, Session, ProductEvent, Order } from "@/lib/mock-data"
+import { getTrackingDashboardData, isTrackingConfigured, trackEvent } from "@/lib/tracking-store"
+import {
+  isTrackEventType,
+  type TrackEventMetadata,
+  type TrackEventPayload,
+} from "@/lib/tracking-types"
+
+function parseTrackMetadata(value: unknown): TrackEventMetadata | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined
+  }
+
+  const rawMetadata = value as Record<string, unknown>
+  const metadata: TrackEventMetadata = {}
+
+  if (typeof rawMetadata.page === "string") {
+    metadata.page = rawMetadata.page
+  }
+
+  if (rawMetadata.user_type === "guest" || rawMetadata.user_type === "customer") {
+    metadata.user_type = rawMetadata.user_type
+  }
+
+  if (typeof rawMetadata.user_id === "string") {
+    metadata.user_id = rawMetadata.user_id
+  }
+
+  if (typeof rawMetadata.time_spent_ms === "number" && Number.isFinite(rawMetadata.time_spent_ms)) {
+    metadata.time_spent_ms = rawMetadata.time_spent_ms
+  }
+
+  if (typeof rawMetadata.scroll_depth === "number" && Number.isFinite(rawMetadata.scroll_depth)) {
+    metadata.scroll_depth = rawMetadata.scroll_depth
+  }
+
+  if (typeof rawMetadata.quantity === "number" && Number.isFinite(rawMetadata.quantity)) {
+    metadata.quantity = rawMetadata.quantity
+  }
+
+  if (typeof rawMetadata.price_paid === "number" && Number.isFinite(rawMetadata.price_paid)) {
+    metadata.price_paid = rawMetadata.price_paid
+  }
+
+  return Object.keys(metadata).length > 0 ? metadata : undefined
+}
+
+function parseTrackPayload(value: unknown): TrackEventPayload | null {
+  if (!value || typeof value !== "object") {
+    return null
+  }
+
+  const body = value as Record<string, unknown>
+  if (!isTrackEventType(body.event_type) || typeof body.session_id !== "string") {
+    return null
+  }
+
+  const sessionId = body.session_id.trim()
+  if (!sessionId) {
+    return null
+  }
+
+  const payload: TrackEventPayload = {
+    event_type: body.event_type,
+    session_id: sessionId,
+    timestamp: typeof body.timestamp === "number" && Number.isFinite(body.timestamp)
+      ? body.timestamp
+      : Date.now(),
+    metadata: parseTrackMetadata(body.metadata),
+  }
+
+  if (typeof body.product_id === "string" && body.product_id.trim()) {
+    payload.product_id = body.product_id.trim()
+  }
+
+  return payload
+}
+
+function getTrackingNotConfiguredResponse() {
+  return Response.json(
+    {
+      error:
+        "Tracking database is not configured. Add DATABASE_URL (Neon Postgres) before using /api/track.",
+    },
+    { status: 500 }
+  )
+}
 
 export async function POST(request: Request) {
+  if (!isTrackingConfigured()) {
+    return getTrackingNotConfiguredResponse()
+  }
+
   try {
     const body = await request.json()
-    const { event_type, session_id, product_id, timestamp, metadata } = body
+    const payload = parseTrackPayload(body)
 
-    let newSession: Session | undefined
-    let newEvent: ProductEvent | undefined
-    let newOrder: Order | undefined
-
-    if (event_type === "session_start") {
-      newSession = {
-        id: session_id,
-        timestamp,
-        pages_visited: [metadata?.page || "/"],
-        time_spent_ms: 0,
-        user_type: metadata?.user_type || "guest",
-        user_id: metadata?.user_id,
-      }
-      mockSessions.push(newSession)
+    if (!payload) {
+      return Response.json({ error: "Invalid tracking payload" }, { status: 400 })
     }
 
-    if (event_type === "page_view" || event_type === "product_view") {
-      const session = mockSessions.find((s) => s.id === session_id)
-      if (session && metadata?.page) {
-        if (!session.pages_visited.includes(metadata.page)) {
-          session.pages_visited.push(metadata.page)
-        }
-      }
-
-      if (product_id) {
-        newEvent = {
-          id: `evt_${Date.now()}`,
-          session_id,
-          product_id,
-          event_type: "view",
-          time_spent_ms: metadata?.time_spent_ms || 0,
-          scroll_depth: metadata?.scroll_depth || 0,
-          timestamp,
-        }
-        mockProductEvents.push(newEvent)
-      }
-    }
-
-    if (event_type === "add_to_cart" || event_type === "click") {
-      newEvent = {
-        id: `evt_${Date.now()}`,
-        session_id,
-        product_id,
-        event_type: event_type === "add_to_cart" ? "add_to_cart" : "click",
-        time_spent_ms: 0,
-        scroll_depth: metadata?.scroll_depth || 0,
-        timestamp,
-      }
-      mockProductEvents.push(newEvent)
-    }
-
-    if (event_type === "purchase") {
-      newOrder = {
-        id: `ord_${Date.now()}`,
-        session_id,
-        user_id: metadata?.user_id,
-        product_id,
-        quantity: metadata?.quantity || 1,
-        price_paid: metadata?.price_paid || 0,
-        timestamp,
-      }
-      mockOrders.push(newOrder)
-    }
+    const tracked = await trackEvent(payload)
+    const { stats } = await getTrackingDashboardData()
 
     return Response.json({
       success: true,
-      tracked: {
-        session: newSession,
-        event: newEvent,
-        order: newOrder,
-      },
-      total_sessions: mockSessions.length,
-      total_events: mockProductEvents.length,
-      total_orders: mockOrders.length,
+      tracked,
+      total_sessions: stats.totalSessions,
+      total_events: stats.totalEvents,
+      total_orders: stats.totalOrders,
+      revenue: stats.totalRevenue,
     })
-  } catch (error) {
-    console.error("[v0] Tracking error:", error)
+  } catch {
     return Response.json({ error: "Tracking failed" }, { status: 500 })
   }
 }
 
 export async function GET() {
-  return Response.json({
-    sessions: mockSessions.length,
-    events: mockProductEvents.length,
-    orders: mockOrders.length,
-    revenue: mockOrders.reduce((sum, o) => sum + o.price_paid, 0),
-  })
+  if (!isTrackingConfigured()) {
+    return getTrackingNotConfiguredResponse()
+  }
+
+  try {
+    const data = await getTrackingDashboardData()
+
+    return Response.json({
+      stats: data.stats,
+      sessions: data.sessions,
+      events: data.events,
+      orders: data.orders,
+      sessions_count: data.stats.totalSessions,
+      events_count: data.stats.totalEvents,
+      orders_count: data.stats.totalOrders,
+      revenue: data.stats.totalRevenue,
+      avg_session_duration: data.stats.avgSessionDuration,
+    })
+  } catch {
+    return Response.json({ error: "Failed to fetch tracking data" }, { status: 500 })
+  }
 }
