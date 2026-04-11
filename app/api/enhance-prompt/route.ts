@@ -31,7 +31,21 @@ function buildPrompt(
 ): string {
   const parts: string[] = [];
 
-  // Core user idea is always first and highest priority
+  const brandName = normalize(profile.brandName);
+
+  // ── Label instruction FIRST — diffusion models weight earlier tokens more ──
+  // Being explicit here prevents any other word in the prompt from bleeding
+  // onto the label surface.
+  if (brandName) {
+    parts.push(
+      `product label reads only "${brandName}" in elegant serif font`,
+      `only the word "${brandName}" on the label — no other text anywhere on the product`
+    );
+  } else {
+    parts.push("blank white rectangular label with thin gold border, no text on label");
+  }
+
+  // ── Core visual idea ──────────────────────────────────────────────────────
   const rough = cleanPrompt(roughPrompt);
   if (rough) parts.push(rough);
 
@@ -43,29 +57,12 @@ function buildPrompt(
   const style = normalize(profile.visualStyle);
   if (style) parts.push(style);
 
-  // Campaign angle from article
+  // Campaign angle — use only the article title for visual mood, not the full
+  // summary, to avoid random words being read as label text by the model
   const articleTitle = normalize(article.title);
-  const articleSummary = normalize(article.summary);
-  if (articleTitle) parts.push(`campaign: ${articleTitle}`);
-  if (articleSummary && articleSummary !== articleTitle) parts.push(articleSummary);
+  if (articleTitle) parts.push(articleTitle);
 
-  // Target audience context
-  const audience = normalize(profile.audience);
-  if (audience) parts.push(`for ${audience}`);
-
-  // Brand name on the label — if provided, emboss it prominently
-  const brandName = normalize(profile.brandName);
-  if (brandName) {
-    parts.push(
-      `white rectangular product label with thin gold border`,
-      `brand name "${brandName}" printed on the label in elegant serif typography`,
-      `logo text clearly legible`
-    );
-  } else {
-    parts.push("blank white rectangular label with thin gold border");
-  }
-
-  // Fixed quality suffixes for FLUX
+  // ── Quality suffixes ──────────────────────────────────────────────────────
   parts.push(
     "photorealistic marketing visual",
     "hero composition",
