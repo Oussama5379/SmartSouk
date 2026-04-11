@@ -1,3 +1,8 @@
+---
+description: "Use when you need product context, scope, and domain terminology for Smart Business Suite."
+applyTo: "**/*"
+---
+
 # Project Overview — Smart Business Suite
 # Lunar Hack 2.0 · ATIA Club FST · April 11–12, 2026
 # Domain: Perfume / Fragrance SME

@@ -1,3 +1,8 @@
+---
+description: "Use when writing or reviewing code to enforce coding conventions and implementation rules."
+applyTo: "**/*"
+---
+
 # Coding Standards — Smart Business Suite
 # Domain: Perfume SME
 

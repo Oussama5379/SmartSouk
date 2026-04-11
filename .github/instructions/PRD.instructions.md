@@ -1,3 +1,8 @@
+---
+description: "Use when implementing features to align behavior with product requirements and user roles."
+applyTo: "**/*"
+---
+
 # Product Requirements Document — Smart Business Suite
 # Lunar Hack 2.0 · ATIA Club FST · April 11–12, 2026
 # Domain: Perfume / Fragrance SME

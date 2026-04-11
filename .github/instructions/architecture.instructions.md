@@ -1,3 +1,8 @@
+---
+description: "Use when making architecture decisions, service boundaries, and integration choices."
+applyTo: "**/*"
+---
+
 # Architecture Instructions — Smart Business Suite
 # Domain: Perfume SME
 
