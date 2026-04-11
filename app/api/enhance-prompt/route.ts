@@ -53,6 +53,18 @@ function buildPrompt(
   const audience = normalize(profile.audience);
   if (audience) parts.push(`for ${audience}`);
 
+  // Brand name on the label — if provided, emboss it prominently
+  const brandName = normalize(profile.brandName);
+  if (brandName) {
+    parts.push(
+      `white rectangular product label with thin gold border`,
+      `brand name "${brandName}" printed on the label in elegant serif typography`,
+      `logo text clearly legible`
+    );
+  } else {
+    parts.push("blank white rectangular label with thin gold border");
+  }
+
   // Fixed quality suffixes for FLUX
   parts.push(
     "photorealistic marketing visual",
@@ -60,10 +72,7 @@ function buildPrompt(
     "controlled studio lighting",
     "realistic textures",
     "high detail",
-    "commercial product photography",
-    "blank white rectangular label with thin gold border",
-    "no text",
-    "no logos"
+    "commercial product photography"
   );
 
   return parts.join(", ");
