@@ -13,6 +13,9 @@ import {
 const databaseUrl = process.env.DATABASE_URL?.trim()
 const sql = databaseUrl ? neon(databaseUrl) : null
 
+const STORE_DB_FAILURE_COOLDOWN_MS = 30_000
+const STORE_DB_TIMEOUT_MS = 4_000
+
 const DEFAULT_STORE_SETTINGS: Omit<StoreSettings, "updated_at"> = {
   store_name: "SmartSouk",
   store_description:
@@ -21,6 +24,7 @@ const DEFAULT_STORE_SETTINGS: Omit<StoreSettings, "updated_at"> = {
   hero_image_url: "",
 }
 
+const seedTimestamp = Date.now()
 const seedProducts: StoreProduct[] = defaultSeedProducts.map((product) => ({
   id: product.id,
   name: product.name,
@@ -29,9 +33,12 @@ const seedProducts: StoreProduct[] = defaultSeedProducts.map((product) => ({
   stock_status: product.stock_status,
   description: product.description,
   image: product.image,
+  created_at: seedTimestamp,
+  updated_at: seedTimestamp,
 }))
 
 let ensureStoreSchemaPromise: Promise<void> | null = null
+let storeDbUnavailableUntil = 0
 let memoryProducts = seedProducts.map((product) => ({ ...product }))
 let memorySettings: StoreSettings = {
   ...DEFAULT_STORE_SETTINGS,
@@ -100,6 +107,64 @@ function toNumber(value: unknown): number {
   }
 
   return 0
+}
+
+function cloneProduct(product: StoreProduct): StoreProduct {
+  return { ...product }
+}
+
+function sortProductsByFreshness(products: StoreProduct[]): StoreProduct[] {
+  return products.sort((left, right) => {
+    if ((right.updated_at ?? 0) !== (left.updated_at ?? 0)) {
+      return (right.updated_at ?? 0) - (left.updated_at ?? 0)
+    }
+    return (right.created_at ?? 0) - (left.created_at ?? 0)
+  })
+}
+
+function listMemoryProducts(): StoreProduct[] {
+  return sortProductsByFreshness(memoryProducts.map(cloneProduct))
+}
+
+function isStoreDbReachable(): boolean {
+  if (!sql) {
+    return false
+  }
+  return Date.now() >= storeDbUnavailableUntil
+}
+
+function markStoreDbRecovered() {
+  storeDbUnavailableUntil = 0
+}
+
+function markStoreDbFailure(error: unknown, context: string) {
+  if (!sql) {
+    return
+  }
+
+  const now = Date.now()
+  if (now >= storeDbUnavailableUntil) {
+    console.error(`[store-data] Falling back to in-memory store after ${context} failed.`, error)
+  }
+  storeDbUnavailableUntil = now + STORE_DB_FAILURE_COOLDOWN_MS
+}
+
+async function withStoreDbTimeout<T>(operation: Promise<T>, context: string): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`[store-data] ${context} timed out after ${STORE_DB_TIMEOUT_MS}ms.`))
+    }, STORE_DB_TIMEOUT_MS)
+  })
+
+  try {
+    return await Promise.race([operation, timeoutPromise])
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle)
+    }
+  }
 }
 
 function createProductId(): string {
@@ -186,13 +251,18 @@ function mapStoreSettingsRow(row: StoreSettingsRow | undefined): StoreSettings {
 }
 
 async function ensureStoreSchema() {
-  if (!sql) {
+  if (!isStoreDbReachable()) {
+    return
+  }
+
+  const db = sql
+  if (!db) {
     return
   }
 
   if (!ensureStoreSchemaPromise) {
     ensureStoreSchemaPromise = (async () => {
-      await sql`
+      await db`
         CREATE TABLE IF NOT EXISTS store_products (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -202,16 +272,28 @@ async function ensureStoreSchema() {
           description TEXT NOT NULL,
           image TEXT,
           created_at BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT),
-          updated_at BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT)
+          updated_at BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT),
+          deleted_at BIGINT
         );
       `
 
-      await sql`
+      await db`
+        ALTER TABLE store_products
+        ADD COLUMN IF NOT EXISTS deleted_at BIGINT;
+      `
+
+      await db`
         CREATE INDEX IF NOT EXISTS idx_store_products_updated_at
         ON store_products(updated_at DESC);
       `
 
-      await sql`
+      await db`
+        CREATE INDEX IF NOT EXISTS idx_store_products_active_updated_at
+        ON store_products(updated_at DESC)
+        WHERE deleted_at IS NULL;
+      `
+
+      await db`
         CREATE TABLE IF NOT EXISTS store_settings (
           id INT PRIMARY KEY,
           store_name TEXT NOT NULL,
@@ -223,7 +305,7 @@ async function ensureStoreSchema() {
         );
       `
 
-      await sql`
+      await db`
         INSERT INTO store_settings (id, store_name, store_description, contact_email, hero_image_url)
         VALUES (
           1,
@@ -235,16 +317,27 @@ async function ensureStoreSchema() {
         ON CONFLICT (id) DO NOTHING;
       `
 
-      const [countRow] = (await sql`
+      const [countRow] = (await db`
         SELECT COUNT(*)::INT AS count
-        FROM store_products;
+        FROM store_products
+        WHERE deleted_at IS NULL;
       `) as Array<{ count: string | number }>
 
       const existingCount = toNumber(countRow?.count)
       if (existingCount === 0) {
         for (const product of seedProducts) {
-          await sql`
-            INSERT INTO store_products (id, name, category, price_tnd, stock_status, description, image)
+          await db`
+            INSERT INTO store_products (
+              id,
+              name,
+              category,
+              price_tnd,
+              stock_status,
+              description,
+              image,
+              created_at,
+              updated_at
+            )
             VALUES (
               ${product.id},
               ${product.name},
@@ -252,38 +345,64 @@ async function ensureStoreSchema() {
               ${product.price_tnd},
               ${product.stock_status},
               ${product.description},
-              ${product.image ?? null}
+              ${product.image ?? null},
+              ${product.created_at ?? Date.now()},
+              ${product.updated_at ?? Date.now()}
             )
             ON CONFLICT (id) DO NOTHING;
           `
         }
       }
-    })()
+    })().catch((error) => {
+      ensureStoreSchemaPromise = null
+      throw error
+    })
   }
 
-  await ensureStoreSchemaPromise
+  try {
+    await withStoreDbTimeout(ensureStoreSchemaPromise, "ensureStoreSchema")
+    markStoreDbRecovered()
+  } catch (error) {
+    markStoreDbFailure(error, "ensureStoreSchema")
+    throw error
+  }
 }
 
 export function isStorePersisted(): boolean {
-  return sql !== null
+  return sql !== null && isStoreDbReachable()
 }
 
 export async function listStoreProducts(): Promise<StoreProduct[]> {
-  if (!sql) {
-    return memoryProducts
-      .map((product) => ({ ...product }))
-      .sort((left, right) => (right.updated_at ?? 0) - (left.updated_at ?? 0))
+  if (!isStoreDbReachable()) {
+    return listMemoryProducts()
   }
 
-  await ensureStoreSchema()
+  const db = sql
+  if (!db) {
+    return listMemoryProducts()
+  }
 
-  const rows = (await sql`
-    SELECT id, name, category, price_tnd, stock_status, description, image, created_at, updated_at
-    FROM store_products
-    ORDER BY updated_at DESC, created_at DESC;
-  `) as StoreProductRow[]
+  try {
+    await ensureStoreSchema()
 
-  return rows.map(mapStoreProductRow)
+    const rows = (await withStoreDbTimeout(
+      db`
+        SELECT id, name, category, price_tnd, stock_status, description, image, created_at, updated_at
+        FROM store_products
+        WHERE deleted_at IS NULL
+        ORDER BY updated_at DESC, created_at DESC;
+      `,
+      "listStoreProducts"
+    )) as StoreProductRow[]
+
+    const mapped = rows.map(mapStoreProductRow)
+    memoryProducts = mapped.map(cloneProduct)
+    markStoreDbRecovered()
+    return listMemoryProducts()
+  } catch (error) {
+    markStoreDbFailure(error, "listStoreProducts")
+    return listMemoryProducts()
+  }
 }
 
 export async function getStoreProductById(productId: string): Promise<StoreProduct | null> {
@@ -292,21 +411,45 @@ export async function getStoreProductById(productId: string): Promise<StoreProdu
     return null
   }
 
-  if (!sql) {
+  if (!isStoreDbReachable()) {
     const found = memoryProducts.find((product) => product.id === normalizedId)
-    return found ? { ...found } : null
+    return found ? cloneProduct(found) : null
   }
 
-  await ensureStoreSchema()
+  const db = sql
+  if (!db) {
+    const found = memoryProducts.find((product) => product.id === normalizedId)
+    return found ? cloneProduct(found) : null
+  }
 
-  const [row] = (await sql`
-    SELECT id, name, category, price_tnd, stock_status, description, image, created_at, updated_at
-    FROM store_products
-    WHERE id = ${normalizedId}
-    LIMIT 1;
-  `) as StoreProductRow[]
+  try {
+    await ensureStoreSchema()
 
-  return row ? mapStoreProductRow(row) : null
+    const [row] = (await withStoreDbTimeout(
+      db`
+        SELECT id, name, category, price_tnd, stock_status, description, image, created_at, updated_at
+        FROM store_products
+        WHERE id = ${normalizedId} AND deleted_at IS NULL
+        LIMIT 1;
+      `,
+      "getStoreProductById"
+    )) as StoreProductRow[]
+
+    if (!row) {
+      return null
+    }
+
+    const mapped = mapStoreProductRow(row)
+    memoryProducts = memoryProducts.map((product) =>
+      product.id === mapped.id ? cloneProduct(mapped) : product
+    )
+    markStoreDbRecovered()
+    return cloneProduct(mapped)
+  } catch (error) {
+    markStoreDbFailure(error, "getStoreProductById")
+    const found = memoryProducts.find((product) => product.id === normalizedId)
+    return found ? cloneProduct(found) : null
+  }
 }
 
 export async function createStoreProduct(input: CreateStoreProductInput): Promise<StoreProduct> {
@@ -323,30 +466,62 @@ export async function createStoreProduct(input: CreateStoreProductInput): Promis
     updated_at: now,
   }
 
-  if (!sql) {
-    memoryProducts = [product, ...memoryProducts]
-    return { ...product }
+  if (!isStoreDbReachable()) {
+    memoryProducts = [cloneProduct(product), ...memoryProducts.filter((entry) => entry.id !== product.id)]
+    return cloneProduct(product)
   }
 
-  await ensureStoreSchema()
+  const db = sql
+  if (!db) {
+    memoryProducts = [cloneProduct(product), ...memoryProducts.filter((entry) => entry.id !== product.id)]
+    return cloneProduct(product)
+  }
 
-  const [row] = (await sql`
-    INSERT INTO store_products (id, name, category, price_tnd, stock_status, description, image, created_at, updated_at)
-    VALUES (
-      ${product.id},
-      ${product.name},
-      ${product.category},
-      ${product.price_tnd},
-      ${product.stock_status},
-      ${product.description},
-      ${product.image ?? null},
-      ${product.created_at ?? now},
-      ${product.updated_at ?? now}
-    )
-    RETURNING id, name, category, price_tnd, stock_status, description, image, created_at, updated_at;
-  `) as StoreProductRow[]
+  try {
+    await ensureStoreSchema()
 
-  return mapStoreProductRow(row)
+    const [row] = (await withStoreDbTimeout(
+      db`
+        INSERT INTO store_products (
+          id,
+          name,
+          category,
+          price_tnd,
+          stock_status,
+          description,
+          image,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${product.id},
+          ${product.name},
+          ${product.category},
+          ${product.price_tnd},
+          ${product.stock_status},
+          ${product.description},
+          ${product.image ?? null},
+          ${product.created_at ?? now},
+          ${product.updated_at ?? now}
+        )
+        RETURNING id, name, category, price_tnd, stock_status, description, image, created_at, updated_at;
+      `,
+      "createStoreProduct"
+    )) as StoreProductRow[]
+
+    if (!row) {
+      throw new Error("[store-data] Failed to create product row.")
+    }
+
+    const created = mapStoreProductRow(row)
+    memoryProducts = [cloneProduct(created), ...memoryProducts.filter((entry) => entry.id !== created.id)]
+    markStoreDbRecovered()
+    return cloneProduct(created)
+  } catch (error) {
+    markStoreDbFailure(error, "createStoreProduct")
+    memoryProducts = [cloneProduct(product), ...memoryProducts.filter((entry) => entry.id !== product.id)]
+    return cloneProduct(product)
+  }
 }
 
 export async function updateStoreProduct(
@@ -385,28 +560,52 @@ export async function updateStoreProduct(
     updated_at: Date.now(),
   }
 
-  if (!sql) {
-    memoryProducts = memoryProducts.map((product) => (product.id === existing.id ? updated : product))
-    return { ...updated }
+  if (!isStoreDbReachable()) {
+    memoryProducts = memoryProducts.map((product) => (product.id === existing.id ? cloneProduct(updated) : product))
+    return cloneProduct(updated)
   }
 
-  await ensureStoreSchema()
+  const db = sql
+  if (!db) {
+    memoryProducts = memoryProducts.map((product) => (product.id === existing.id ? cloneProduct(updated) : product))
+    return cloneProduct(updated)
+  }
 
-  const [row] = (await sql`
-    UPDATE store_products
-    SET
-      name = ${updated.name},
-      category = ${updated.category},
-      price_tnd = ${updated.price_tnd},
-      stock_status = ${updated.stock_status},
-      description = ${updated.description},
-      image = ${updated.image ?? null},
-      updated_at = ${updated.updated_at ?? Date.now()}
-    WHERE id = ${existing.id}
-    RETURNING id, name, category, price_tnd, stock_status, description, image, created_at, updated_at;
-  `) as StoreProductRow[]
+  try {
+    await ensureStoreSchema()
 
-  return row ? mapStoreProductRow(row) : null
+    const [row] = (await withStoreDbTimeout(
+      db`
+        UPDATE store_products
+        SET
+          name = ${updated.name},
+          category = ${updated.category},
+          price_tnd = ${updated.price_tnd},
+          stock_status = ${updated.stock_status},
+          description = ${updated.description},
+          image = ${updated.image ?? null},
+          updated_at = ${updated.updated_at ?? Date.now()}
+        WHERE id = ${existing.id} AND deleted_at IS NULL
+        RETURNING id, name, category, price_tnd, stock_status, description, image, created_at, updated_at;
+      `,
+      "updateStoreProduct"
+    )) as StoreProductRow[]
+
+    if (!row) {
+      return null
+    }
+
+    const mapped = mapStoreProductRow(row)
+    memoryProducts = memoryProducts.map((product) =>
+      product.id === mapped.id ? cloneProduct(mapped) : product
+    )
+    markStoreDbRecovered()
+    return cloneProduct(mapped)
+  } catch (error) {
+    markStoreDbFailure(error, "updateStoreProduct")
+    memoryProducts = memoryProducts.map((product) => (product.id === existing.id ? cloneProduct(updated) : product))
+    return cloneProduct(updated)
+  }
 }
 
 export async function deleteStoreProduct(productId: string): Promise<boolean> {
@@ -415,38 +614,78 @@ export async function deleteStoreProduct(productId: string): Promise<boolean> {
     return false
   }
 
-  if (!sql) {
+  if (!isStoreDbReachable()) {
     const before = memoryProducts.length
     memoryProducts = memoryProducts.filter((product) => product.id !== normalizedId)
     return memoryProducts.length < before
   }
 
-  await ensureStoreSchema()
+  const db = sql
+  if (!db) {
+    const before = memoryProducts.length
+    memoryProducts = memoryProducts.filter((product) => product.id !== normalizedId)
+    return memoryProducts.length < before
+  }
 
-  const rows = (await sql`
-    DELETE FROM store_products
-    WHERE id = ${normalizedId}
-    RETURNING id;
-  `) as Array<{ id: string }>
+  try {
+    await ensureStoreSchema()
 
-  return rows.length > 0
+    const now = Date.now()
+    const rows = (await withStoreDbTimeout(
+      db`
+        UPDATE store_products
+        SET deleted_at = ${now}, updated_at = ${now}
+        WHERE id = ${normalizedId} AND deleted_at IS NULL
+        RETURNING id;
+      `,
+      "deleteStoreProduct"
+    )) as Array<{ id: string }>
+
+    if (rows.length > 0) {
+      memoryProducts = memoryProducts.filter((product) => product.id !== normalizedId)
+      markStoreDbRecovered()
+      return true
+    }
+
+    return false
+  } catch (error) {
+    markStoreDbFailure(error, "deleteStoreProduct")
+    const before = memoryProducts.length
+    memoryProducts = memoryProducts.filter((product) => product.id !== normalizedId)
+    return memoryProducts.length < before
+  }
 }
 
 export async function getStoreSettings(): Promise<StoreSettings> {
-  if (!sql) {
+  if (!isStoreDbReachable()) {
     return { ...memorySettings }
   }
 
-  await ensureStoreSchema()
+  const db = sql
+  if (!db) {
+    return { ...memorySettings }
+  }
 
-  const [row] = (await sql`
-    SELECT store_name, store_description, contact_email, hero_image_url, updated_at
-    FROM store_settings
-    WHERE id = 1
-    LIMIT 1;
-  `) as StoreSettingsRow[]
+  try {
+    await ensureStoreSchema()
 
-  return mapStoreSettingsRow(row)
+    const [row] = (await withStoreDbTimeout(
+      db`
+        SELECT store_name, store_description, contact_email, hero_image_url, updated_at
+        FROM store_settings
+        WHERE id = 1
+        LIMIT 1;
+      `,
+      "getStoreSettings"
+    )) as StoreSettingsRow[]
+
+    memorySettings = mapStoreSettingsRow(row)
+    markStoreDbRecovered()
+    return { ...memorySettings }
+  } catch (error) {
+    markStoreDbFailure(error, "getStoreSettings")
+    return { ...memorySettings }
+  }
 }
 
 export async function updateStoreSettings(input: UpdateStoreSettingsInput): Promise<StoreSettings> {
@@ -471,26 +710,43 @@ export async function updateStoreSettings(input: UpdateStoreSettingsInput): Prom
     updated_at: Date.now(),
   }
 
-  if (!sql) {
+  if (!isStoreDbReachable()) {
     memorySettings = { ...updated }
     return { ...memorySettings }
   }
 
-  await ensureStoreSchema()
+  const db = sql
+  if (!db) {
+    memorySettings = { ...updated }
+    return { ...memorySettings }
+  }
 
-  const [row] = (await sql`
-    UPDATE store_settings
-    SET
-      store_name = ${updated.store_name},
-      store_description = ${updated.store_description},
-      contact_email = ${updated.contact_email},
-      hero_image_url = ${updated.hero_image_url || null},
-      updated_at = ${updated.updated_at}
-    WHERE id = 1
-    RETURNING store_name, store_description, contact_email, hero_image_url, updated_at;
-  `) as StoreSettingsRow[]
+  try {
+    await ensureStoreSchema()
 
-  return mapStoreSettingsRow(row)
+    const [row] = (await withStoreDbTimeout(
+      db`
+        UPDATE store_settings
+        SET
+          store_name = ${updated.store_name},
+          store_description = ${updated.store_description},
+          contact_email = ${updated.contact_email},
+          hero_image_url = ${updated.hero_image_url || null},
+          updated_at = ${updated.updated_at}
+        WHERE id = 1
+        RETURNING store_name, store_description, contact_email, hero_image_url, updated_at;
+      `,
+      "updateStoreSettings"
+    )) as StoreSettingsRow[]
+
+    memorySettings = mapStoreSettingsRow(row)
+    markStoreDbRecovered()
+    return { ...memorySettings }
+  } catch (error) {
+    markStoreDbFailure(error, "updateStoreSettings")
+    memorySettings = { ...updated }
+    return { ...memorySettings }
+  }
 }
 
 export async function getStoreSnapshot(): Promise<StoreSnapshot> {

@@ -183,7 +183,10 @@ async function ensureTrackingSchema() {
         CREATE INDEX IF NOT EXISTS idx_orders_session_timestamp
         ON orders(session_id, timestamp DESC);
       `
-    })()
+    })().catch((error) => {
+      ensureSchemaPromise = null
+      throw error
+    })
   }
 
   await ensureSchemaPromise
@@ -227,7 +230,10 @@ async function upsertSession(params: {
     )
     ON CONFLICT (id) DO UPDATE
       SET
-        user_type = COALESCE(EXCLUDED.user_type, sessions.user_type),
+        user_type = CASE
+          WHEN sessions.user_type = 'customer' OR EXCLUDED.user_type = 'customer' THEN 'customer'
+          ELSE 'guest'
+        END,
         user_id = COALESCE(EXCLUDED.user_id, sessions.user_id),
         utm_source = COALESCE(sessions.utm_source, EXCLUDED.utm_source),
         utm_medium = COALESCE(sessions.utm_medium, EXCLUDED.utm_medium),
@@ -323,7 +329,11 @@ async function cacheSessionSignals(params: {
   }
 
   if (writes.length > 0) {
-    await Promise.all(writes)
+    try {
+      await Promise.all(writes)
+    } catch (error) {
+      console.warn("[tracking-store] Failed to update Redis session signal cache.", error)
+    }
   }
 }
 
@@ -680,18 +690,22 @@ export async function getSessionSignals(sessionId: string): Promise<SessionSigna
   const pageKey = `tracking:session:${normalizedSessionId}:last_page`
 
   if (redis) {
-    const [cachedViewedProducts, cachedPage] = await Promise.all([
-      redis.smembers(viewedProductsKey),
-      redis.get(pageKey),
-    ])
+    try {
+      const [cachedViewedProducts, cachedPage] = await Promise.all([
+        redis.smembers(viewedProductsKey),
+        redis.get(pageKey),
+      ])
 
-    const viewedProductIds = Array.isArray(cachedViewedProducts)
-      ? cachedViewedProducts.filter((value): value is string => typeof value === "string")
-      : []
-    const lastPage = typeof cachedPage === "string" ? cachedPage : null
+      const viewedProductIds = Array.isArray(cachedViewedProducts)
+        ? cachedViewedProducts.filter((value): value is string => typeof value === "string")
+        : []
+      const lastPage = typeof cachedPage === "string" ? cachedPage : null
 
-    if (viewedProductIds.length > 0 || lastPage) {
-      return { viewedProductIds, lastPage }
+      if (viewedProductIds.length > 0 || lastPage) {
+        return { viewedProductIds, lastPage }
+      }
+    } catch (error) {
+      console.warn("[tracking-store] Failed to read Redis session signal cache.", error)
     }
   }
 
@@ -744,7 +758,11 @@ export async function getSessionSignals(sessionId: string): Promise<SessionSigna
     }
 
     if (writes.length > 0) {
-      await Promise.all(writes)
+      try {
+        await Promise.all(writes)
+      } catch (error) {
+        console.warn("[tracking-store] Failed to backfill Redis session signal cache.", error)
+      }
     }
   }
 

@@ -165,17 +165,10 @@ export async function POST(request: Request) {
     }
 
     const tracked = await trackEvent(payload)
-    const { stats } = await getTrackingDashboardData()
 
     return Response.json({
       success: true,
       tracked,
-      total_sessions: stats.totalSessions,
-      total_events: stats.totalEvents,
-      total_orders: stats.totalOrders,
-      revenue: stats.totalRevenue,
-      revenue_per_visitor: stats.revenuePerVisitor,
-      cart_abandonment_rate: stats.cartAbandonmentRate,
     })
   } catch {
     return Response.json({ error: "Tracking failed" }, { status: 500 })
