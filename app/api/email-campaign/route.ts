@@ -38,7 +38,7 @@ Include:
 Format as JSON array with email objects.`;
 
   const result = streamText({
-    model: google('gemini-3.1-flash-lite'),
+    model: google('gemini-3.1-flash-lite-preview'),
     prompt,
     temperature: 0.8,
   });

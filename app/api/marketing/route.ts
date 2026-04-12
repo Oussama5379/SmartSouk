@@ -38,7 +38,7 @@ Create compelling social media marketing content for this product. The content s
 Generate an Instagram caption, hashtags, an AI image prompt, and a strategy tip.`
 
   const result = await generateText({
-    model: google("gemini-3.1-flash-lite"),
+    model: google("gemini-3.1-flash-lite-preview"),
     prompt,
     output: Output.object({ schema: campaignSchema }),
   })

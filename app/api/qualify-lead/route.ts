@@ -102,7 +102,7 @@ export async function POST(req: Request) {
     })
 
     const result = await generateText({
-      model: google("gemini-3.1-flash-lite"),
+      model: google("gemini-3.1-flash-lite-preview"),
       system: `You are a sales qualification assistant for ${settings.store_name}.
 Your task is to score this lead and recommend the best next action.
 You must call scoreAndRecommend exactly once with a pragmatic sales assessment.`,

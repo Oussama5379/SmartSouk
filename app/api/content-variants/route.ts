@@ -21,7 +21,7 @@ For each variation, provide:
 Format as JSON array with these exact keys. Make each variation unique and compelling.`;
 
   const result = streamText({
-    model: google('gemini-3.1-flash-lite'),
+    model: google('gemini-3.1-flash-lite-preview'),
     prompt,
     temperature: 0.8,
   });
