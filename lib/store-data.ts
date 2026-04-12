@@ -23,6 +23,13 @@ const DEFAULT_STORE_SETTINGS: Omit<StoreSettings, "updated_at"> = {
     "Discover handcrafted ceramics, woven rugs, and organic oils from Tunisia. Every piece tells a story of tradition.",
   contact_email: "contact@smartsouk.tn",
   hero_image_url: "",
+  site_icon_url: "",
+  feature_one_title: "100% Natural",
+  feature_one_description: "Organic oils and natural materials",
+  feature_two_title: "Worldwide Shipping",
+  feature_two_description: "Delivery to your doorstep",
+  feature_three_title: "Handcrafted",
+  feature_three_description: "By skilled local artisans",
 }
 
 const seedTimestamp = Date.now()
@@ -63,6 +70,13 @@ interface StoreSettingsRow {
   store_description: string
   contact_email: string
   hero_image_url: string | null
+  site_icon_url: string | null
+  feature_one_title: string | null
+  feature_one_description: string | null
+  feature_two_title: string | null
+  feature_two_description: string | null
+  feature_three_title: string | null
+  feature_three_description: string | null
   updated_at: string | number
 }
 
@@ -89,6 +103,13 @@ export interface UpdateStoreSettingsInput {
   store_description?: string
   contact_email?: string
   hero_image_url?: string
+  site_icon_url?: string
+  feature_one_title?: string
+  feature_one_description?: string
+  feature_two_title?: string
+  feature_two_description?: string
+  feature_three_title?: string
+  feature_three_description?: string
 }
 
 function toNumber(value: unknown): number {
@@ -247,6 +268,37 @@ function mapStoreSettingsRow(row: StoreSettingsRow | undefined): StoreSettings {
     ),
     contact_email: normalizeText(row.contact_email, DEFAULT_STORE_SETTINGS.contact_email, 180),
     hero_image_url: row.hero_image_url ?? "",
+    site_icon_url: row.site_icon_url ?? "",
+    feature_one_title: normalizeText(
+      row.feature_one_title ?? "",
+      DEFAULT_STORE_SETTINGS.feature_one_title ?? "100% Natural",
+      80
+    ),
+    feature_one_description: normalizeText(
+      row.feature_one_description ?? "",
+      DEFAULT_STORE_SETTINGS.feature_one_description ?? "Organic oils and natural materials",
+      180
+    ),
+    feature_two_title: normalizeText(
+      row.feature_two_title ?? "",
+      DEFAULT_STORE_SETTINGS.feature_two_title ?? "Worldwide Shipping",
+      80
+    ),
+    feature_two_description: normalizeText(
+      row.feature_two_description ?? "",
+      DEFAULT_STORE_SETTINGS.feature_two_description ?? "Delivery to your doorstep",
+      180
+    ),
+    feature_three_title: normalizeText(
+      row.feature_three_title ?? "",
+      DEFAULT_STORE_SETTINGS.feature_three_title ?? "Handcrafted",
+      80
+    ),
+    feature_three_description: normalizeText(
+      row.feature_three_description ?? "",
+      DEFAULT_STORE_SETTINGS.feature_three_description ?? "By skilled local artisans",
+      180
+    ),
     updated_at: toNumber(row.updated_at) || Date.now(),
   }
 }
@@ -301,19 +353,81 @@ async function ensureStoreSchema() {
           store_description TEXT NOT NULL,
           contact_email TEXT NOT NULL,
           hero_image_url TEXT,
+          site_icon_url TEXT,
+          feature_one_title TEXT,
+          feature_one_description TEXT,
+          feature_two_title TEXT,
+          feature_two_description TEXT,
+          feature_three_title TEXT,
+          feature_three_description TEXT,
           updated_at BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT),
           CONSTRAINT store_settings_single_row CHECK (id = 1)
         );
       `
 
       await db`
-        INSERT INTO store_settings (id, store_name, store_description, contact_email, hero_image_url)
+        ALTER TABLE store_settings
+        ADD COLUMN IF NOT EXISTS site_icon_url TEXT;
+      `
+
+      await db`
+        ALTER TABLE store_settings
+        ADD COLUMN IF NOT EXISTS feature_one_title TEXT;
+      `
+
+      await db`
+        ALTER TABLE store_settings
+        ADD COLUMN IF NOT EXISTS feature_one_description TEXT;
+      `
+
+      await db`
+        ALTER TABLE store_settings
+        ADD COLUMN IF NOT EXISTS feature_two_title TEXT;
+      `
+
+      await db`
+        ALTER TABLE store_settings
+        ADD COLUMN IF NOT EXISTS feature_two_description TEXT;
+      `
+
+      await db`
+        ALTER TABLE store_settings
+        ADD COLUMN IF NOT EXISTS feature_three_title TEXT;
+      `
+
+      await db`
+        ALTER TABLE store_settings
+        ADD COLUMN IF NOT EXISTS feature_three_description TEXT;
+      `
+
+      await db`
+        INSERT INTO store_settings (
+          id,
+          store_name,
+          store_description,
+          contact_email,
+          hero_image_url,
+          site_icon_url,
+          feature_one_title,
+          feature_one_description,
+          feature_two_title,
+          feature_two_description,
+          feature_three_title,
+          feature_three_description
+        )
         VALUES (
           1,
           ${DEFAULT_STORE_SETTINGS.store_name},
           ${DEFAULT_STORE_SETTINGS.store_description},
           ${DEFAULT_STORE_SETTINGS.contact_email},
-          ${DEFAULT_STORE_SETTINGS.hero_image_url}
+          ${DEFAULT_STORE_SETTINGS.hero_image_url},
+          ${DEFAULT_STORE_SETTINGS.site_icon_url ?? ""},
+          ${DEFAULT_STORE_SETTINGS.feature_one_title ?? "100% Natural"},
+          ${DEFAULT_STORE_SETTINGS.feature_one_description ?? "Organic oils and natural materials"},
+          ${DEFAULT_STORE_SETTINGS.feature_two_title ?? "Worldwide Shipping"},
+          ${DEFAULT_STORE_SETTINGS.feature_two_description ?? "Delivery to your doorstep"},
+          ${DEFAULT_STORE_SETTINGS.feature_three_title ?? "Handcrafted"},
+          ${DEFAULT_STORE_SETTINGS.feature_three_description ?? "By skilled local artisans"}
         )
         ON CONFLICT (id) DO NOTHING;
       `
@@ -462,7 +576,7 @@ export async function createStoreProduct(input: CreateStoreProductInput): Promis
     price_tnd: normalizePrice(input.price_tnd),
     stock_status: normalizeStockStatus(input.stock_status),
     description: normalizeText(input.description, "No description available.", 1000),
-    image: normalizeOptionalText(input.image, 2048),
+    image: normalizeOptionalText(input.image, 5_000_000),
     created_at: now,
     updated_at: now,
   }
@@ -556,7 +670,7 @@ export async function updateStoreProduct(
         : existing.description,
     image:
       typeof input.image === "string"
-        ? normalizeOptionalText(input.image, 2048)
+        ? normalizeOptionalText(input.image, 5_000_000)
         : existing.image,
     updated_at: Date.now(),
   }
@@ -672,7 +786,19 @@ export async function getStoreSettings(): Promise<StoreSettings> {
 
     const [row] = (await withStoreDbTimeout(
       db`
-        SELECT store_name, store_description, contact_email, hero_image_url, updated_at
+        SELECT
+          store_name,
+          store_description,
+          contact_email,
+          hero_image_url,
+          site_icon_url,
+          feature_one_title,
+          feature_one_description,
+          feature_two_title,
+          feature_two_description,
+          feature_three_title,
+          feature_three_description,
+          updated_at
         FROM store_settings
         WHERE id = 1
         LIMIT 1;
@@ -708,6 +834,64 @@ export async function updateStoreSettings(input: UpdateStoreSettingsInput): Prom
       typeof input.hero_image_url === "string"
         ? input.hero_image_url.trim().slice(0, 2048)
         : existing.hero_image_url,
+    site_icon_url:
+      typeof input.site_icon_url === "string"
+        ? input.site_icon_url.trim().slice(0, 2048)
+        : existing.site_icon_url,
+    feature_one_title:
+      typeof input.feature_one_title === "string"
+        ? normalizeText(
+            input.feature_one_title,
+            existing.feature_one_title ?? DEFAULT_STORE_SETTINGS.feature_one_title ?? "100% Natural",
+            80
+          )
+        : existing.feature_one_title,
+    feature_one_description:
+      typeof input.feature_one_description === "string"
+        ? normalizeText(
+            input.feature_one_description,
+            existing.feature_one_description ??
+              DEFAULT_STORE_SETTINGS.feature_one_description ??
+              "Organic oils and natural materials",
+            180
+          )
+        : existing.feature_one_description,
+    feature_two_title:
+      typeof input.feature_two_title === "string"
+        ? normalizeText(
+            input.feature_two_title,
+            existing.feature_two_title ?? DEFAULT_STORE_SETTINGS.feature_two_title ?? "Worldwide Shipping",
+            80
+          )
+        : existing.feature_two_title,
+    feature_two_description:
+      typeof input.feature_two_description === "string"
+        ? normalizeText(
+            input.feature_two_description,
+            existing.feature_two_description ??
+              DEFAULT_STORE_SETTINGS.feature_two_description ??
+              "Delivery to your doorstep",
+            180
+          )
+        : existing.feature_two_description,
+    feature_three_title:
+      typeof input.feature_three_title === "string"
+        ? normalizeText(
+            input.feature_three_title,
+            existing.feature_three_title ?? DEFAULT_STORE_SETTINGS.feature_three_title ?? "Handcrafted",
+            80
+          )
+        : existing.feature_three_title,
+    feature_three_description:
+      typeof input.feature_three_description === "string"
+        ? normalizeText(
+            input.feature_three_description,
+            existing.feature_three_description ??
+              DEFAULT_STORE_SETTINGS.feature_three_description ??
+              "By skilled local artisans",
+            180
+          )
+        : existing.feature_three_description,
     updated_at: Date.now(),
   }
 
@@ -733,9 +917,28 @@ export async function updateStoreSettings(input: UpdateStoreSettingsInput): Prom
           store_description = ${updated.store_description},
           contact_email = ${updated.contact_email},
           hero_image_url = ${updated.hero_image_url || null},
+          site_icon_url = ${updated.site_icon_url || null},
+          feature_one_title = ${updated.feature_one_title || null},
+          feature_one_description = ${updated.feature_one_description || null},
+          feature_two_title = ${updated.feature_two_title || null},
+          feature_two_description = ${updated.feature_two_description || null},
+          feature_three_title = ${updated.feature_three_title || null},
+          feature_three_description = ${updated.feature_three_description || null},
           updated_at = ${updated.updated_at}
         WHERE id = 1
-        RETURNING store_name, store_description, contact_email, hero_image_url, updated_at;
+        RETURNING
+          store_name,
+          store_description,
+          contact_email,
+          hero_image_url,
+          site_icon_url,
+          feature_one_title,
+          feature_one_description,
+          feature_two_title,
+          feature_two_description,
+          feature_three_title,
+          feature_three_description,
+          updated_at;
       `,
       "updateStoreSettings"
     )) as StoreSettingsRow[]

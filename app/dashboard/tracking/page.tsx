@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Clock, Eye, Loader2, ShoppingCart, TrendingUp, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { readClientCache, writeClientCache } from "@/lib/client-cache"
 import type { Order, Session, StoreProduct } from "@/lib/store-types"
 import type { TrackedProductEvent, TrackingStats } from "@/lib/tracking-types"
 
@@ -28,32 +29,47 @@ const emptyStats: TrackingStats = {
   cartsAbandoned: 0,
 }
 
+const TRACKING_CACHE_KEY = "dashboard:tracking:v1"
+const TRACKING_CACHE_MAX_AGE_MS = 5 * 60 * 1000
+
+interface TrackingPageCacheSnapshot {
+  stats: TrackingStats
+  products: StoreProduct[]
+  sessions: Session[]
+  events: TrackedProductEvent[]
+  orders: Order[]
+}
+
 export default function TrackingDashboard() {
-  const [stats, setStats] = useState<TrackingStats>(emptyStats)
-  const [products, setProducts] = useState<StoreProduct[]>([])
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [events, setEvents] = useState<TrackedProductEvent[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
+  const cachedSnapshot = useMemo(
+    () => readClientCache<TrackingPageCacheSnapshot>(TRACKING_CACHE_KEY, TRACKING_CACHE_MAX_AGE_MS),
+    []
+  )
+  const [stats, setStats] = useState<TrackingStats>(cachedSnapshot?.stats ?? emptyStats)
+  const [products, setProducts] = useState<StoreProduct[]>(cachedSnapshot?.products ?? [])
+  const [sessions, setSessions] = useState<Session[]>(cachedSnapshot?.sessions ?? [])
+  const [events, setEvents] = useState<TrackedProductEvent[]>(cachedSnapshot?.events ?? [])
+  const [orders, setOrders] = useState<Order[]>(cachedSnapshot?.orders ?? [])
+  const [loading, setLoading] = useState(!cachedSnapshot)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const loadTrackingData = async () => {
-    setLoading(true)
+  const loadTrackingData = async (options?: { background?: boolean }) => {
+    if (!options?.background) {
+      setLoading(true)
+    }
     setErrorMessage(null)
 
     try {
-      const [trackingResponse, productsResponse] = await Promise.all([
-        fetch("/api/track", {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          cache: "no-store",
-        }),
-        fetch("/api/store/products", {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          cache: "no-store",
-        }),
-      ])
+        const [trackingResponse, productsResponse] = await Promise.all([
+          fetch("/api/track", {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }),
+          fetch("/api/store/products", {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }),
+        ])
 
       const trackingPayload = (await trackingResponse.json()) as TrackingApiResponse
       if (!trackingResponse.ok) {
@@ -63,21 +79,37 @@ export default function TrackingDashboard() {
 
       const productsPayload = (await productsResponse.json()) as { products?: StoreProduct[] }
 
-      setStats(trackingPayload.stats ?? emptyStats)
-      setSessions(Array.isArray(trackingPayload.sessions) ? trackingPayload.sessions : [])
-      setEvents(Array.isArray(trackingPayload.events) ? trackingPayload.events : [])
-      setOrders(Array.isArray(trackingPayload.orders) ? trackingPayload.orders : [])
-      setProducts(Array.isArray(productsPayload.products) ? productsPayload.products : [])
+      const nextStats = trackingPayload.stats ?? emptyStats
+      const nextSessions = Array.isArray(trackingPayload.sessions) ? trackingPayload.sessions : []
+      const nextEvents = Array.isArray(trackingPayload.events) ? trackingPayload.events : []
+      const nextOrders = Array.isArray(trackingPayload.orders) ? trackingPayload.orders : []
+      const nextProducts = Array.isArray(productsPayload.products) ? productsPayload.products : []
+
+      setStats(nextStats)
+      setSessions(nextSessions)
+      setEvents(nextEvents)
+      setOrders(nextOrders)
+      setProducts(nextProducts)
+
+      writeClientCache<TrackingPageCacheSnapshot>(TRACKING_CACHE_KEY, {
+        stats: nextStats,
+        sessions: nextSessions,
+        events: nextEvents,
+        orders: nextOrders,
+        products: nextProducts,
+      })
     } catch {
       setErrorMessage("Failed to load tracking data")
     } finally {
-      setLoading(false)
+      if (!options?.background) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    void loadTrackingData()
-  }, [])
+    void loadTrackingData({ background: !!cachedSnapshot })
+  }, [cachedSnapshot])
 
   const getProductName = (productId: string | null) => {
     if (!productId) {

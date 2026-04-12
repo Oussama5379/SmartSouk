@@ -102,6 +102,85 @@ export interface RecommendationSegment {
   indicators: string[]
 }
 
+export const MARKETING_SEGMENT_KEYS = [
+  "target_segment",
+  "high_value_customers",
+  "new_customers",
+  "inactive_users",
+  "vip_members",
+] as const
+
+export type MarketingSegmentKey = (typeof MARKETING_SEGMENT_KEYS)[number]
+
+export interface MarketingSegmentMember {
+  user_id: string
+  email?: string
+  name?: string
+  total_spending: number
+  order_count: number
+  activity_events: number
+  last_activity_at: number | null
+  top_interests: string[]
+}
+
+export interface MarketingSegment {
+  key: MarketingSegmentKey
+  name: string
+  summary: string
+  indicators: string[]
+  count: number
+  user_ids: string[]
+  recipient_emails: string[]
+  members: MarketingSegmentMember[]
+}
+
+export interface MarketingSegmentsApiResponse {
+  generatedAt: string
+  segments: MarketingSegment[]
+}
+
+export interface UserDashboardRecommendation {
+  product_id: string
+  product_name: string
+  reason: string
+  confidence: number
+}
+
+export interface UserMostBoughtItem {
+  product_id: string
+  product_name: string
+  quantity: number
+  spent_tnd: number
+}
+
+export interface UserRecentPurchase {
+  order_id: string
+  product_id: string
+  product_name: string
+  quantity: number
+  spent_tnd: number
+  purchased_at: number
+}
+
+export interface UserCategorySpending {
+  category: string
+  quantity: number
+  spent_tnd: number
+}
+
+export interface UserDashboardInsightsResponse {
+  generatedAt: string
+  cacheHit: boolean
+  cachedUntil: string
+  totalSpentTnd: number
+  totalOrders: number
+  avgOrderValueTnd: number
+  mostBoughtItem: UserMostBoughtItem | null
+  recommendation: UserDashboardRecommendation | null
+  recentPurchases: UserRecentPurchase[]
+  spendingByCategory: UserCategorySpending[]
+}
+
 export interface ProductPerformanceSnapshot {
   product_id: string
   product_name: string

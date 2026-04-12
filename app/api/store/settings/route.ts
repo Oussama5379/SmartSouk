@@ -7,6 +7,13 @@ const updateStoreSettingsSchema = z.object({
   store_description: z.string().trim().min(5).max(400).optional(),
   contact_email: z.string().trim().email().max(180).optional(),
   hero_image_url: z.string().trim().max(2048).optional(),
+  site_icon_url: z.string().trim().max(2048).optional(),
+  feature_one_title: z.string().trim().min(2).max(80).optional(),
+  feature_one_description: z.string().trim().min(3).max(180).optional(),
+  feature_two_title: z.string().trim().min(2).max(80).optional(),
+  feature_two_description: z.string().trim().min(3).max(180).optional(),
+  feature_three_title: z.string().trim().min(2).max(80).optional(),
+  feature_three_description: z.string().trim().min(3).max(180).optional(),
 })
 
 export async function GET() {

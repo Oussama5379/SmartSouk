@@ -3,14 +3,14 @@
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowRight, Leaf, Loader2, Package, Sparkles } from "lucide-react"
+import { CartDropdown } from "@/components/cart-dropdown"
 import { ChatWidget } from "@/components/chat-widget"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { useCart } from "@/hooks/use-cart"
 import { useSessionTracking } from "@/hooks/use-session-tracking"
 import type { StoreProduct, StoreSettings } from "@/lib/store-types"
-
-const PURCHASED_STORAGE_KEY = "aurea_purchased_product_ids"
 
 interface StoreBootstrapResponse {
   settings: StoreSettings
@@ -55,20 +55,26 @@ function toBackgroundImage(url: string): string {
 
 export default function StorefrontPage() {
   const { sessionId, currentPath, trackProductEvent, trackChatOpen } = useSessionTracking()
+  const { items: cartItems, addItem } = useCart()
   const [focusedProductId, setFocusedProductId] = useState<string | null>(null)
   const [settings, setSettings] = useState<StoreSettings>(fallbackSettings)
   const [products, setProducts] = useState<StoreProduct[]>([])
   const [loadingStore, setLoadingStore] = useState(true)
   const [statusMessage, setStatusMessage] = useState("")
-  const [checkoutProductId, setCheckoutProductId] = useState<string | null>(null)
-  const [buyingProductId, setBuyingProductId] = useState<string | null>(null)
-  const [purchasedProductIds, setPurchasedProductIds] = useState<Set<string>>(new Set())
   const viewedProductsRef = useRef<Set<string>>(new Set())
 
   const featuredProducts = useMemo(
     () => products.filter((product) => product.stock_status !== "out_of_stock").slice(0, 8),
     [products]
   )
+
+  const cartQuantityByProductId = useMemo(() => {
+    const byProduct = new Map<string, number>()
+    for (const item of cartItems) {
+      byProduct.set(item.product_id, (byProduct.get(item.product_id) ?? 0) + Math.max(1, item.quantity))
+    }
+    return byProduct
+  }, [cartItems])
 
   const loadStoreData = async () => {
     setLoadingStore(true)
@@ -98,29 +104,6 @@ export default function StorefrontPage() {
     void loadStoreData()
   }, [])
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return
-    }
-
-    try {
-      const raw = window.localStorage.getItem(PURCHASED_STORAGE_KEY)
-      if (!raw) {
-        return
-      }
-
-      const parsed = JSON.parse(raw) as unknown
-      if (!Array.isArray(parsed)) {
-        return
-      }
-
-      const normalized = parsed.filter((value): value is string => typeof value === "string")
-      setPurchasedProductIds(new Set(normalized))
-    } catch {
-      // Ignore invalid local storage payload.
-    }
-  }, [])
-
   const handleProductHover = (productId: string) => {
     setFocusedProductId(productId)
     if (!viewedProductsRef.current.has(productId)) {
@@ -134,59 +117,15 @@ export default function StorefrontPage() {
     trackProductEvent(productId, "click")
   }
 
-  const handleBuyClick = (product: StoreProduct) => {
+  const handleAddToCart = (product: StoreProduct) => {
     if (product.stock_status === "out_of_stock") {
       return
     }
 
     setFocusedProductId(product.id)
-    setCheckoutProductId(product.id)
+    addItem(product.id, 1)
     trackProductEvent(product.id, "add_to_cart")
-    setStatusMessage(`${product.name} is ready. Click Pay to complete instantly.`)
-  }
-
-  const handlePayNow = async (product: StoreProduct) => {
-    if (!sessionId) {
-      setStatusMessage("Session is not ready yet. Please try again.")
-      return
-    }
-
-    setBuyingProductId(product.id)
-    setFocusedProductId(product.id)
-    trackProductEvent(product.id, "add_to_cart")
-
-    try {
-      const response = await fetch("/api/store/purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          product_id: product.id,
-          quantity: 1,
-        }),
-      })
-
-      const body = (await response.json()) as { error?: string }
-      if (!response.ok) {
-        setStatusMessage(body.error ?? "Purchase failed")
-        return
-      }
-
-      const nextPurchased = new Set(purchasedProductIds)
-      nextPurchased.add(product.id)
-      setPurchasedProductIds(nextPurchased)
-      setCheckoutProductId(null)
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(PURCHASED_STORAGE_KEY, JSON.stringify(Array.from(nextPurchased)))
-      }
-
-      setStatusMessage(`${product.name} purchased successfully.`)
-    } catch {
-      setStatusMessage("Purchase failed")
-    } finally {
-      setBuyingProductId(null)
-    }
+    setStatusMessage(`${product.name} added to cart.`)
   }
 
   const heroImageUrl = settings.hero_image_url?.trim() || ""
@@ -194,7 +133,7 @@ export default function StorefrontPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
-        <div className="container flex h-16 items-center justify-between">
+        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
               {settings.store_name.charAt(0).toUpperCase() || "S"}
@@ -213,6 +152,7 @@ export default function StorefrontPage() {
             </Link>
           </nav>
           <div className="flex items-center gap-4">
+            <CartDropdown sessionId={sessionId} />
             <Link href="/dashboard">
               <Button variant="outline" size="sm">
                 Dashboard
@@ -222,18 +162,15 @@ export default function StorefrontPage() {
         </div>
       </header>
 
-      <section className="relative overflow-hidden bg-gradient-to-b from-primary/5 to-background py-24 md:py-32">
-        <div className="container">
-          <div className="mx-auto max-w-3xl text-center">
-            <Badge variant="secondary" className="mb-4">
-              Authentic Tunisian Craftsmanship
-            </Badge>
+      <section className="relative overflow-hidden bg-gradient-to-b from-primary/5 to-background py-14 md:py-20">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-4xl text-center">
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl text-balance">
               {settings.store_name}
             </h1>
 
             <div
-              className="mt-6 overflow-hidden rounded-xl border"
+              className="mt-5 overflow-hidden rounded-2xl border"
               style={
                 heroImageUrl
                   ? {
@@ -244,7 +181,7 @@ export default function StorefrontPage() {
                   : undefined
               }
             >
-              <div className={heroImageUrl ? "bg-black/45 p-6" : "bg-muted/40 p-6"}>
+              <div className={heroImageUrl ? "bg-black/45 px-6 py-10 md:px-8 md:py-14" : "bg-muted/40 px-6 py-10 md:px-8 md:py-14"}>
                 <p
                   className={`text-lg text-balance ${
                     heroImageUrl ? "text-white" : "text-muted-foreground"
@@ -255,7 +192,7 @@ export default function StorefrontPage() {
               </div>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
               <Button size="lg" asChild>
                 <Link href="#products">
                   Shop Collection <ArrowRight className="ml-2 h-4 w-4" />
@@ -274,7 +211,7 @@ export default function StorefrontPage() {
       </section>
 
       <section className="border-y bg-muted/30 py-12">
-        <div className="container">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-8 md:grid-cols-3">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -308,10 +245,10 @@ export default function StorefrontPage() {
       </section>
 
       <section id="products" className="py-20">
-        <div className="container">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center">
             <h2 className="text-3xl font-bold tracking-tight">Featured Products</h2>
-            <p className="mt-2 text-muted-foreground">Browse articles and buy directly from the catalog</p>
+            <p className="mt-2 text-muted-foreground">Browse articles and add products to your cart</p>
           </div>
 
           {loadingStore ? (
@@ -327,9 +264,13 @@ export default function StorefrontPage() {
                   onMouseEnter={() => handleProductHover(product.id)}
                 >
                   <div className="aspect-square bg-muted relative">
-                    <div className="absolute inset-0 flex items-center justify-center text-4xl text-muted-foreground/30">
-                      {getCategoryEmoji(product.category)}
-                    </div>
+                    {product.image ? (
+                      <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-4xl text-muted-foreground/30">
+                        {getCategoryEmoji(product.category)}
+                      </div>
+                    )}
                     <Badge
                       variant={product.stock_status === "in_stock" ? "secondary" : "destructive"}
                       className="absolute top-2 right-2"
@@ -361,25 +302,13 @@ export default function StorefrontPage() {
                         </Button>
                         <Button
                           size="sm"
-                          disabled={
-                            product.stock_status === "out_of_stock" ||
-                            purchasedProductIds.has(product.id) ||
-                            (buyingProductId !== null && buyingProductId === product.id)
-                          }
-                          onClick={() => handleBuyClick(product)}
+                          disabled={product.stock_status === "out_of_stock"}
+                          onClick={() => handleAddToCart(product)}
                         >
-                          {purchasedProductIds.has(product.id) ? "Bought" : "Buy"}
+                          {cartQuantityByProductId.has(product.id)
+                            ? `In Cart (${cartQuantityByProductId.get(product.id)})`
+                            : "Add to Cart"}
                         </Button>
-
-                        {checkoutProductId === product.id && !purchasedProductIds.has(product.id) && (
-                          <Button
-                            size="sm"
-                            disabled={buyingProductId === product.id}
-                            onClick={() => void handlePayNow(product)}
-                          >
-                            {buyingProductId === product.id ? "Paying..." : "Pay"}
-                          </Button>
-                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -391,7 +320,7 @@ export default function StorefrontPage() {
       </section>
 
       <section id="about" className="border-t bg-muted/30 py-20">
-        <div className="container">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-3xl font-bold tracking-tight">Our Story</h2>
             <p className="mt-4 text-muted-foreground">{settings.store_description}</p>
@@ -400,7 +329,7 @@ export default function StorefrontPage() {
       </section>
 
       <footer id="contact" className="border-t py-12">
-        <div className="container">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">

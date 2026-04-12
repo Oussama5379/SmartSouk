@@ -4,13 +4,13 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, Loader2, ShoppingCart } from "lucide-react"
+import { CartDropdown } from "@/components/cart-dropdown"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { useCart } from "@/hooks/use-cart"
 import { useSessionTracking } from "@/hooks/use-session-tracking"
 import type { StoreProduct, StoreSettings } from "@/lib/store-types"
-
-const PURCHASED_STORAGE_KEY = "aurea_purchased_product_ids"
 
 interface StoreProductResponse {
   product?: StoreProduct
@@ -57,14 +57,12 @@ export default function ArticlePage() {
   const params = useParams<{ id: string }>()
   const articleId = typeof params.id === "string" ? params.id.trim() : ""
   const { sessionId, trackProductEvent } = useSessionTracking()
+  const { addItem } = useCart()
 
   const [settings, setSettings] = useState<StoreSettings>(fallbackSettings)
   const [product, setProduct] = useState<StoreProduct | null>(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState("")
-  const [checkoutReady, setCheckoutReady] = useState(false)
-  const [isPurchased, setIsPurchased] = useState(false)
-  const [buying, setBuying] = useState(false)
   const viewTrackedRef = useRef(false)
 
   useEffect(() => {
@@ -122,103 +120,18 @@ export default function ArticlePage() {
     viewTrackedRef.current = true
   }, [product, trackProductEvent])
 
-  useEffect(() => {
-    if (!product || typeof window === "undefined") {
-      return
-    }
-
-    try {
-      const raw = window.localStorage.getItem(PURCHASED_STORAGE_KEY)
-      if (!raw) {
-        setIsPurchased(false)
-        return
-      }
-
-      const parsed = JSON.parse(raw) as unknown
-      if (!Array.isArray(parsed)) {
-        setIsPurchased(false)
-        return
-      }
-
-      setIsPurchased(parsed.includes(product.id))
-    } catch {
-      setIsPurchased(false)
-    }
-  }, [product])
-
-  const handleBuy = () => {
+  const handleAddToCart = () => {
     if (!product) {
       return
     }
 
-    if (product.stock_status === "out_of_stock" || isPurchased) {
+    if (product.stock_status === "out_of_stock") {
       return
     }
 
-    setCheckoutReady(true)
-    setMessage("Ready to pay. Click Pay to confirm instantly.")
+    addItem(product.id, 1)
     trackProductEvent(product.id, "add_to_cart")
-  }
-
-  const handlePay = async () => {
-    if (!product) {
-      return
-    }
-
-    if (!sessionId) {
-      setMessage("Session is not ready yet. Please try again.")
-      return
-    }
-
-    setBuying(true)
-    setMessage("")
-
-    trackProductEvent(product.id, "add_to_cart")
-
-    try {
-      const response = await fetch("/api/store/purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          product_id: product.id,
-          quantity: 1,
-        }),
-      })
-
-      const body = (await response.json()) as { error?: string }
-      if (!response.ok) {
-        setMessage(body.error ?? "Purchase failed")
-        return
-      }
-
-      setCheckoutReady(false)
-      setIsPurchased(true)
-      if (typeof window !== "undefined") {
-        let list: string[] = []
-        try {
-          const raw = window.localStorage.getItem(PURCHASED_STORAGE_KEY)
-          const parsed = raw ? (JSON.parse(raw) as unknown) : []
-          list = Array.isArray(parsed)
-            ? parsed.filter((value): value is string => typeof value === "string")
-            : []
-        } catch {
-          list = []
-        }
-
-        if (!list.includes(product.id)) {
-          list = [...list, product.id]
-        }
-
-        window.localStorage.setItem(PURCHASED_STORAGE_KEY, JSON.stringify(list))
-      }
-
-      setMessage("Purchase confirmed. Thank you for your order.")
-    } catch {
-      setMessage("Purchase failed")
-    } finally {
-      setBuying(false)
-    }
+    setMessage(`${product.name} added to cart.`)
   }
 
   if (loading) {
@@ -253,7 +166,10 @@ export default function ArticlePage() {
             <ArrowLeft className="h-4 w-4" />
             Back to Store
           </Link>
-          <span className="text-sm text-muted-foreground">{settings.store_name}</span>
+          <div className="flex items-center gap-3">
+            <CartDropdown sessionId={sessionId} />
+            <span className="text-sm text-muted-foreground">{settings.store_name}</span>
+          </div>
         </div>
       </header>
 
@@ -286,23 +202,12 @@ export default function ArticlePage() {
             <Button
               size="lg"
               className="w-full sm:w-auto"
-              disabled={product.stock_status === "out_of_stock" || buying || isPurchased}
-              onClick={handleBuy}
+              disabled={product.stock_status === "out_of_stock"}
+              onClick={handleAddToCart}
             >
               <ShoppingCart className="mr-2 h-4 w-4" />
-              {isPurchased ? "Bought" : "Buy"}
+              Add to Cart
             </Button>
-
-            {checkoutReady && !isPurchased && (
-              <Button
-                size="lg"
-                className="w-full sm:w-auto"
-                disabled={buying}
-                onClick={() => void handlePay()}
-              >
-                {buying ? "Paying..." : "Pay"}
-              </Button>
-            )}
 
             {message && <p className="text-sm text-muted-foreground">{message}</p>}
 

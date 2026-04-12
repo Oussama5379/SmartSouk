@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +19,11 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Copy, Check, Sparkles, Image as ImageIcon } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { readClientCache, writeClientCache } from "@/lib/client-cache";
+import type {
+  MarketingSegment,
+  MarketingSegmentsApiResponse,
+} from "@/lib/tracking-types";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 interface Article {
@@ -226,6 +231,9 @@ const DEFAULT_OVERLAY: OverlayConfig = {
   textShadow: false,
 };
 
+const MARKETING_SEGMENTS_CACHE_KEY = "dashboard:marketing-segments:v1";
+const MARKETING_SEGMENTS_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function hexToRgb(hex: string) {
   return {
@@ -405,6 +413,15 @@ function ColorRow({
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function MarketingPage() {
+  const cachedSegments = useMemo(
+    () =>
+      readClientCache<MarketingSegment[]>(
+        MARKETING_SEGMENTS_CACHE_KEY,
+        MARKETING_SEGMENTS_CACHE_MAX_AGE_MS,
+      ),
+    [],
+  );
+
   // Brand profile
   const [brandName, setBrandName] = useState("");
   const [industry, setIndustry] = useState("");
@@ -450,6 +467,11 @@ export default function MarketingPage() {
   const [campaignCopy, setCampaignCopy] = useState("");
   const [isSuggestingEmail, setIsSuggestingEmail] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [segmentOptions, setSegmentOptions] = useState<MarketingSegment[]>(
+    cachedSegments ?? [],
+  );
+  const [segmentsLoading, setSegmentsLoading] = useState(!cachedSegments);
+  const [selectedSegmentKey, setSelectedSegmentKey] = useState<string>("manual");
 
   const updateCfg = useCallback((patch: Partial<OverlayConfig>) => {
     setCfg((prev) => ({ ...prev, ...patch }));
@@ -487,6 +509,72 @@ export default function MarketingPage() {
       .join("\n\n");
     setCampaignCopy(initialCopy);
   }, [captions, campaignCopy]);
+
+  useEffect(() => {
+    const loadSegments = async (options?: { background?: boolean }) => {
+      if (!options?.background) {
+        setSegmentsLoading(true);
+      }
+      try {
+        const response = await fetch("/api/marketing/segments", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const body = (await response.json()) as MarketingSegmentsApiResponse;
+        const segments = Array.isArray(body.segments) ? body.segments : [];
+        setSegmentOptions(segments);
+        writeClientCache<MarketingSegment[]>(
+          MARKETING_SEGMENTS_CACHE_KEY,
+          segments,
+        );
+      } catch {
+        // Segmentation is optional; keep manual mode.
+      } finally {
+        if (!options?.background) {
+          setSegmentsLoading(false);
+        }
+      }
+    };
+
+    void loadSegments({ background: !!cachedSegments });
+  }, [cachedSegments]);
+
+  const selectedSegment = useMemo(
+    () => segmentOptions.find((segment) => segment.key === selectedSegmentKey) ?? null,
+    [segmentOptions, selectedSegmentKey],
+  );
+
+  const handleUseSegmentRecipients = () => {
+    if (!selectedSegment) {
+      toast({
+        variant: "destructive",
+        title: "Select a segment",
+        description: "Choose a target segment first.",
+      });
+      return;
+    }
+
+    if (selectedSegment.recipient_emails.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "No recipients available",
+        description:
+          "This segment currently has no email addresses linked to tracked users.",
+      });
+      return;
+    }
+
+    setEmailRecipients(selectedSegment.recipient_emails.join("\n"));
+    toast({
+      title: "Recipients loaded",
+      description: `${selectedSegment.recipient_emails.length} emails loaded from ${selectedSegment.name}.`,
+    });
+  };
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -1429,6 +1517,58 @@ export default function MarketingPage() {
               >
                 {isSuggestingEmail ? "Suggesting…" : "Suggest with AI"}
               </Button>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Target segment</Label>
+              <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                <Select
+                  value={selectedSegmentKey}
+                  onValueChange={setSelectedSegmentKey}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select audience segment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual recipients</SelectItem>
+                    {segmentOptions.map((segment) => (
+                      <SelectItem key={segment.key} value={segment.key}>
+                        {segment.name} ({segment.count})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  disabled={
+                    segmentsLoading ||
+                    selectedSegmentKey === "manual" ||
+                    !selectedSegment
+                  }
+                  onClick={handleUseSegmentRecipients}
+                >
+                  {segmentsLoading ? "Loading…" : "Use Segment Recipients"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Segment users are classified by spending, activity, and product
+                interest from tracked events.
+              </p>
+              {selectedSegment && (
+                <div className="rounded-lg border p-3 bg-muted/20 space-y-1.5">
+                  <p className="text-sm font-semibold">{selectedSegment.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedSegment.summary}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedSegment.indicators.slice(0, 3).map((indicator) => (
+                      <Badge key={indicator} variant="outline">
+                        {indicator}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">

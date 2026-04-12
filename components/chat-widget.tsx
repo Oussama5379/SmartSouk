@@ -5,7 +5,7 @@ import { DefaultChatTransport, type UIMessage } from "ai"
 import { useEffect, useRef, useState } from "react"
 import { Bot, MessageCircle, Send, User, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
+import { Card, CardFooter, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ChatContext, LeadQualificationResult } from "@/lib/tracking-types"
@@ -57,12 +57,6 @@ export function ChatWidget({
   const scrollRef = useRef<HTMLDivElement>(null)
   const leadQualifiedRef = useRef(false)
   const leadQualificationInFlightRef = useRef(false)
-  const [stage, setStage] = useState<"greeting" | "qualifying" | "recommendations">("greeting")
-  const [qualifyingData, setQualifyingData] = useState({
-    sector: "",
-    budget: "",
-    need: "",
-  })
 
   const buildChatContext = (): ChatContext => ({
     session_id: sessionId || undefined,
@@ -73,16 +67,16 @@ export function ChatWidget({
   const { messages, sendMessage, setMessages, status } = useChat<UIMessage>({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
     messages: [
-      {
-        id: "welcome",
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: `Marhaba! Welcome to ${storeName?.trim() || "SmartSouk"}. I'm your AI Sales Intelligence Agent. I'm here to help you find the perfect Tunisian handcrafted products tailored to your needs. Let's start with some quick questions to match you with the right items.\n\nFirst question: What sector are you buying for? (e.g., Personal Use, Gift, Business/Resale, Interior Design)`,
-          },
-        ],
-      },
+        {
+          id: "welcome",
+          role: "assistant",
+          parts: [
+            {
+              type: "text",
+              text: `Marhaba! Welcome to ${storeName?.trim() || "SmartSouk"}. Tell me what you're shopping for and I'll recommend products right away. If needed, I'll ask: "What's your budget in dinars?"`,
+            },
+          ],
+        },
     ] as UIMessage[],
     onFinish: ({ messages: finishedMessages }) => {
       const userTurnCount = finishedMessages.filter((message) => message.role === "user").length
@@ -159,32 +153,6 @@ export function ChatWidget({
     }
   }
 
-  const handleQualifyingQuestion = (userResponse: string) => {
-    setInput("")
-    sendUserMessage(userResponse)
-
-    if (stage === "greeting") {
-      setQualifyingData((prev) => ({ ...prev, sector: userResponse }))
-      setStage("qualifying")
-      return
-    }
-
-    if (stage === "qualifying" && !qualifyingData.budget) {
-      setQualifyingData((prev) => ({ ...prev, budget: userResponse }))
-      return
-    }
-
-    if (stage === "qualifying" && !qualifyingData.need) {
-      setQualifyingData((prev) => ({ ...prev, need: userResponse }))
-      setStage("recommendations")
-    }
-  }
-
-  const quickQuestionButtons =
-    stage === "qualifying"
-      ? ["Personal Use", "Gift", "Business/Resale", "Interior Design"]
-      : null
-
   const toggleChat = () => {
     setIsOpen((prevIsOpen) => {
       const nextIsOpen = !prevIsOpen
@@ -251,25 +219,6 @@ export function ChatWidget({
               ))}
             </div>
           </ScrollArea>
-
-          {quickQuestionButtons && (
-            <CardContent className="p-3 border-t">
-              <div className="flex flex-col gap-2">
-                {quickQuestionButtons.map((buttonLabel) => (
-                  <Button
-                    key={buttonLabel}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleQualifyingQuestion(buttonLabel)}
-                    disabled={isLoading}
-                    className="justify-start text-left h-auto py-2"
-                  >
-                    {buttonLabel}
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          )}
 
           <CardFooter className="border-t p-3">
             <form

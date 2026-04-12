@@ -17,7 +17,17 @@ import {
 import { Toaster } from "@/components/ui/toaster"
 import { Button } from "@/components/ui/button"
 import { signOut, useSession } from "@/lib/auth-client"
+import { isAdminDashboardRoute } from "@/lib/admin-routes"
+import { readClientCache, writeClientCache } from "@/lib/client-cache"
 import { cn } from "@/lib/utils"
+
+const DASHBOARD_LAYOUT_CACHE_KEY = "dashboard:layout:v1"
+const DASHBOARD_LAYOUT_CACHE_TTL_MS = 10 * 60 * 1000
+
+interface DashboardLayoutCacheSnapshot {
+  storeName: string
+  isAdmin: boolean | null
+}
 
 const allNavigation = [
   { name: "Overview", href: "/dashboard", icon: Home, adminOnly: false },
@@ -33,9 +43,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const router = useRouter()
   const { data: session, isPending } = useSession()
-  const [storeName, setStoreName] = useState("SmartSouk")
+  const cachedSnapshot = useMemo(
+    () => readClientCache<DashboardLayoutCacheSnapshot>(DASHBOARD_LAYOUT_CACHE_KEY, DASHBOARD_LAYOUT_CACHE_TTL_MS),
+    []
+  )
+  const [storeName, setStoreName] = useState(cachedSnapshot?.storeName ?? "SmartSouk")
   const [signingOut, setSigningOut] = useState(false)
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(cachedSnapshot?.isAdmin ?? null)
 
   const callbackURL = useMemo(() => {
     if (pathname?.startsWith("/dashboard")) return pathname
@@ -56,12 +70,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [session])
 
   useEffect(() => {
+    if (!session || isAdmin !== false) return
+    if (!isAdminDashboardRoute(pathname)) return
+    router.replace("/dashboard")
+  }, [isAdmin, pathname, router, session])
+
+  useEffect(() => {
     const loadStoreName = async () => {
       try {
         const res = await fetch("/api/store/settings", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
-          cache: "no-store",
         })
         if (!res.ok) return
         const body = (await res.json()) as { settings?: { store_name?: string } }
@@ -74,18 +93,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     void loadStoreName()
   }, [])
 
-  if (isPending || !session) {
+  useEffect(() => {
+    writeClientCache<DashboardLayoutCacheSnapshot>(DASHBOARD_LAYOUT_CACHE_KEY, {
+      storeName,
+      isAdmin,
+    })
+  }, [isAdmin, storeName])
+
+  const navigation =
+    isAdmin === null
+      ? allNavigation.filter((item) => !item.adminOnly)
+      : allNavigation.filter((item) => !item.adminOnly || isAdmin)
+
+  const shouldBlockAdminRoute = isAdminDashboardRoute(pathname) && isAdmin !== true
+
+  useEffect(() => {
+    for (const item of navigation) {
+      router.prefetch(item.href)
+    }
+  }, [navigation, router])
+
+  if (isPending || !session || shouldBlockAdminRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
-
-  const navigation =
-    isAdmin === null
-      ? allNavigation.filter((item) => !item.adminOnly)
-      : allNavigation.filter((item) => !item.adminOnly || isAdmin)
 
   const displayName =
     session.user.name?.trim() || session.user.email?.trim() || "Authenticated user"
@@ -120,6 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Link
                   key={item.name}
                   href={item.href}
+                  prefetch
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                     isActive

@@ -151,18 +151,21 @@ HF_TOKEN=hf_...
 | `/api/auth/[...all]` | GET/POST | Better Auth handler for session, email/password, and OAuth flows |
 | `/api/chat` | POST | Streaming sales chat with session/page/product context + retrieved catalog grounding (RAG) |
 | `/api/marketing` | POST | Campaign generation — caption, hashtags, image prompt, strategy |
+| `/api/marketing/segments` | GET | Builds lifecycle segments (Target, High Value, New, Inactive, VIP) from spend + behavior signals for email targeting |
 | `/api/content-variants` | POST | 3 tone variants (Professional / Fun / Storytelling) |
 | `/api/insights` | POST | AI analysis of analytics data |
 | `/api/recommendations` | GET/POST | Deterministic market-basket/RFM/inventory signals + analytics RAG synthesis for insight summary and actions (protected) |
+| `/api/dashboard/insights` | GET | Authenticated user dashboard summary: spending totals, category breakdown, recent purchases, most bought item, and cached recommendation (12h refresh) |
 | `/api/email-campaign` | POST | 3-email sequence (Hook → Social Proof → Urgency) |
 | `/api/qualify-lead` | POST | JSON lead score + recommendations with tool-calling |
 | `/api/generate-image` | POST | FLUX.1-schnell image generation |
 | `/api/enhance-prompt` | POST | Gemini prompt enhancement |
 | `/api/track` | POST/GET | POST ingests session/product events; GET returns tracking dashboard data and now requires authenticated admin access |
 | `/api/webhooks/payment` | POST | Secure server-side order logging from confirmed payment webhooks with idempotency enforced by `payment_reference` |
+| `/api/store/cart/checkout` | POST | Confirms cart checkout (multi-item) and records each confirmed order |
 
 ### Admin API protection
-- `POST /api/store/products`, `PATCH/DELETE /api/store/products/[id]`, `PUT /api/store/settings`, `GET/POST /api/recommendations`, and `GET /api/track` require an authenticated session.
+- `POST /api/store/products`, `PATCH/DELETE /api/store/products/[id]`, `PUT /api/store/settings`, `GET/POST /api/recommendations`, `GET /api/marketing/segments`, and `GET /api/track` require an authenticated session.
 - If `ADMIN_EMAILS` is configured, only those emails (or users with `role = "admin"`) can call protected admin routes.
 - `POST /api/track` and `POST /api/store/purchase` now ignore spoofed `user_id` payload values and trust authenticated session identity when present.
 

@@ -25,10 +25,18 @@ const fallbackMetadata: Metadata = {
 export async function generateMetadata(): Promise<Metadata> {
   try {
     const settings = await getStoreSettings()
+    const siteIconUrl = settings.site_icon_url?.trim()
+
     return {
       ...fallbackMetadata,
       title: `${settings.store_name} - Authentic Tunisian Craftsmanship`,
       description: settings.store_description,
+      icons: siteIconUrl
+        ? {
+            icon: [{ url: siteIconUrl }],
+            apple: siteIconUrl,
+          }
+        : fallbackMetadata.icons,
     }
   } catch {
     return fallbackMetadata

@@ -5,6 +5,7 @@ import { AlertTriangle, BarChart3, Gift, Lightbulb, Loader2, TrendingUp, Users }
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { readClientCache, writeClientCache } from "@/lib/client-cache"
 import type { StoreProduct } from "@/lib/store-types"
 import type { RecommendationItem, RecommendationsApiResponse } from "@/lib/tracking-types"
 
@@ -49,14 +50,34 @@ const emptyRecommendationsResponse: RecommendationsApiResponse = {
   actionItems: [],
 }
 
+const RECOMMENDATIONS_CACHE_KEY = "dashboard:recommendations:v1"
+const RECOMMENDATIONS_CACHE_MAX_AGE_MS = 5 * 60 * 1000
+
+interface RecommendationsCacheSnapshot {
+  products: StoreProduct[]
+  payload: RecommendationsApiResponse
+}
+
 export default function ProductIntelligencePage() {
-  const [products, setProducts] = useState<StoreProduct[]>([])
-  const [payload, setPayload] = useState<RecommendationsApiResponse>(emptyRecommendationsResponse)
-  const [loading, setLoading] = useState(true)
+  const cachedSnapshot = useMemo(
+    () =>
+      readClientCache<RecommendationsCacheSnapshot>(
+        RECOMMENDATIONS_CACHE_KEY,
+        RECOMMENDATIONS_CACHE_MAX_AGE_MS
+      ),
+    []
+  )
+  const [products, setProducts] = useState<StoreProduct[]>(cachedSnapshot?.products ?? [])
+  const [payload, setPayload] = useState<RecommendationsApiResponse>(
+    cachedSnapshot?.payload ?? emptyRecommendationsResponse
+  )
+  const [loading, setLoading] = useState(!cachedSnapshot)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const loadRecommendations = async () => {
-    setLoading(true)
+  const loadRecommendations = async (options?: { background?: boolean }) => {
+    if (!options?.background) {
+      setLoading(true)
+    }
     setErrorMessage(null)
 
     try {
@@ -64,12 +85,10 @@ export default function ProductIntelligencePage() {
         fetch("/api/recommendations", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
-          cache: "no-store",
         }),
         fetch("/api/store/products", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
-          cache: "no-store",
         }),
       ])
 
@@ -83,18 +102,30 @@ export default function ProductIntelligencePage() {
 
       if (productsResponse.ok) {
         const productsBody = (await productsResponse.json()) as { products?: StoreProduct[] }
-        setProducts(Array.isArray(productsBody.products) ? productsBody.products : [])
+        const nextProducts = Array.isArray(productsBody.products) ? productsBody.products : []
+        setProducts(nextProducts)
+        writeClientCache<RecommendationsCacheSnapshot>(RECOMMENDATIONS_CACHE_KEY, {
+          payload: body,
+          products: nextProducts,
+        })
+      } else {
+        writeClientCache<RecommendationsCacheSnapshot>(RECOMMENDATIONS_CACHE_KEY, {
+          payload: body,
+          products,
+        })
       }
     } catch {
       setErrorMessage("Failed to load recommendations")
     } finally {
-      setLoading(false)
+      if (!options?.background) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    void loadRecommendations()
-  }, [])
+    void loadRecommendations({ background: !!cachedSnapshot })
+  }, [cachedSnapshot])
 
   const getRecommendationColor = (type: RecommendationItem["type"]) => {
     switch (type) {

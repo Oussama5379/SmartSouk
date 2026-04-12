@@ -13,7 +13,11 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { readClientCache, writeClientCache } from "@/lib/client-cache"
 import type { RecommendationsApiResponse } from "@/lib/tracking-types"
+
+const ANALYTICS_CACHE_KEY = "dashboard:analytics:v1"
+const ANALYTICS_CACHE_MAX_AGE_MS = 5 * 60 * 1000
 
 const emptyRecommendationsResponse: RecommendationsApiResponse = {
   generated: false,
@@ -64,19 +68,26 @@ function formatDuration(seconds: number): string {
 }
 
 export default function AnalyticsPage() {
-  const [payload, setPayload] = useState<RecommendationsApiResponse>(emptyRecommendationsResponse)
-  const [loading, setLoading] = useState(true)
+  const cachedPayload = useMemo(
+    () => readClientCache<RecommendationsApiResponse>(ANALYTICS_CACHE_KEY, ANALYTICS_CACHE_MAX_AGE_MS),
+    []
+  )
+  const [payload, setPayload] = useState<RecommendationsApiResponse>(
+    cachedPayload ?? emptyRecommendationsResponse
+  )
+  const [loading, setLoading] = useState(!cachedPayload)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const loadAnalytics = async () => {
-    setLoading(true)
+  const loadAnalytics = async (options?: { background?: boolean }) => {
+    if (!options?.background) {
+      setLoading(true)
+    }
     setErrorMessage(null)
 
     try {
       const response = await fetch("/api/recommendations", {
         method: "GET",
         headers: { "Content-Type": "application/json" },
-        cache: "no-store",
       })
 
       const body = (await response.json()) as RecommendationsApiResponse & { error?: string }
@@ -86,16 +97,19 @@ export default function AnalyticsPage() {
       }
 
       setPayload(body)
+      writeClientCache<RecommendationsApiResponse>(ANALYTICS_CACHE_KEY, body)
     } catch {
       setErrorMessage("Failed to load analytics")
     } finally {
-      setLoading(false)
+      if (!options?.background) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    void loadAnalytics()
-  }, [])
+    void loadAnalytics({ background: !!cachedPayload })
+  }, [cachedPayload])
 
   const maxDailySessions = useMemo(() => {
     const values = payload.salesData.dailyPerformance.map((day) => day.sessions)

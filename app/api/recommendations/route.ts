@@ -1,5 +1,6 @@
 import { listStoreProducts } from "@/lib/store-data"
 import { getTrackingDashboardData, isTrackingConfigured } from "@/lib/tracking-store"
+import { buildCustomerSegments } from "@/lib/customer-segments"
 import { adminErrorResponse, requireAdminAccess } from "@/lib/admin-auth"
 import type {
   DailyPerformanceSnapshot,
@@ -363,90 +364,33 @@ function buildUpsellRecommendation(
 }
 
 function buildSegments(
-  orders: Array<{ session_id: string; user_id?: string; price_paid: number; timestamp: number }>
+  params: {
+    products: StoreProduct[]
+    sessions: Session[]
+    events: TrackedProductEvent[]
+    orders: Array<{
+      id: string
+      session_id: string
+      user_id?: string
+      product_id: string
+      quantity: number
+      price_paid: number
+      timestamp: number
+    }>
+  }
 ): RecommendationSegment[] {
-  if (orders.length === 0) {
-    return []
-  }
+  const segments = buildCustomerSegments({
+    products: params.products,
+    sessions: params.sessions,
+    events: params.events,
+    orders: params.orders,
+  })
 
-  const customerMap = new Map<
-    string,
-    {
-      frequency: number
-      monetary: number
-      lastOrderTs: number
-    }
-  >()
-
-  for (const order of orders) {
-    const key = order.user_id?.trim() || order.session_id
-    const existing = customerMap.get(key) ?? {
-      frequency: 0,
-      monetary: 0,
-      lastOrderTs: 0,
-    }
-
-    existing.frequency += 1
-    existing.monetary += Math.max(0, order.price_paid)
-    existing.lastOrderTs = Math.max(existing.lastOrderTs, order.timestamp)
-    customerMap.set(key, existing)
-  }
-
-  const customers = Array.from(customerMap.values())
-  const avgMonetary =
-    customers.reduce((sum, customer) => sum + customer.monetary, 0) / Math.max(1, customers.length)
-  const now = Date.now()
-
-  const buckets = new Map<
-    string,
-    {
-      count: number
-      totalRecency: number
-      totalFrequency: number
-      totalMonetary: number
-    }
-  >()
-
-  for (const customer of customers) {
-    const recencyDays = Math.max(0, (now - customer.lastOrderTs) / (1000 * 60 * 60 * 24))
-    let label = "Occasional Buyers"
-
-    if (customer.frequency >= 3 && customer.monetary >= avgMonetary && recencyDays <= 30) {
-      label = "Champions"
-    } else if (customer.frequency >= 2 && recencyDays <= 60) {
-      label = "Loyal Customers"
-    } else if (customer.frequency === 1 && recencyDays <= 30) {
-      label = "New Customers"
-    } else if (customer.frequency >= 2 && recencyDays > 90) {
-      label = "At Risk Customers"
-    }
-
-    const bucket = buckets.get(label) ?? {
-      count: 0,
-      totalRecency: 0,
-      totalFrequency: 0,
-      totalMonetary: 0,
-    }
-
-    bucket.count += 1
-    bucket.totalRecency += recencyDays
-    bucket.totalFrequency += customer.frequency
-    bucket.totalMonetary += customer.monetary
-    buckets.set(label, bucket)
-  }
-
-  return Array.from(buckets.entries())
-    .sort((left, right) => right[1].count - left[1].count)
-    .slice(0, 4)
-    .map(([name, bucket]) => ({
-      name,
-      summary: `${bucket.count} customers in this segment.`,
-      indicators: [
-        `Recency: ${round(bucket.totalRecency / bucket.count, 1)} days`,
-        `Frequency: ${round(bucket.totalFrequency / bucket.count, 1)} purchases`,
-        `Monetary: ${round(bucket.totalMonetary / bucket.count, 1)} TND average`,
-      ],
-    }))
+  return segments.map((segment) => ({
+    name: segment.name,
+    summary: segment.summary,
+    indicators: segment.indicators,
+  }))
 }
 
 function buildActionItems(params: {
@@ -545,7 +489,12 @@ async function buildRecommendationsResponse(): Promise<RecommendationsApiRespons
     })
   }
 
-  const customerSegments = buildSegments(orders)
+  const customerSegments = buildSegments({
+    products,
+    sessions,
+    events,
+    orders,
+  })
   const actionItems = buildActionItems({
     recommendations,
     inventoryAlerts,

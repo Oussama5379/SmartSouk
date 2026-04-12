@@ -8,7 +8,7 @@ const updateProductSchema = z.object({
   price_tnd: z.coerce.number().positive().optional(),
   stock_status: z.enum(["in_stock", "low_stock", "out_of_stock"]).optional(),
   description: z.string().trim().min(3).max(1000).optional(),
-  image: z.string().trim().max(2048).optional(),
+  image: z.string().trim().max(5_000_000).optional(),
 })
 
 async function getProductId(context: { params: Promise<{ id: string }> }): Promise<string> {

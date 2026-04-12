@@ -21,6 +21,13 @@ export interface StoreSettings {
   store_description: string
   contact_email: string
   hero_image_url?: string
+  site_icon_url?: string
+  feature_one_title?: string
+  feature_one_description?: string
+  feature_two_title?: string
+  feature_two_description?: string
+  feature_three_title?: string
+  feature_three_description?: string
   updated_at: number
 }
 
