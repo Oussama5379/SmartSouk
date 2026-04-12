@@ -10,24 +10,23 @@ import {
   Lightbulb,
   Loader2,
   LogOut,
-  Mail,
   Megaphone,
   Package,
   Settings,
 } from "lucide-react"
+import { Toaster } from "@/components/ui/toaster"
 import { Button } from "@/components/ui/button"
 import { signOut, useSession } from "@/lib/auth-client"
 import { cn } from "@/lib/utils"
 
 const allNavigation = [
-  { name: "Overview",          href: "/dashboard",                       icon: Home,      adminOnly: false },
-  { name: "Products",          href: "/dashboard/products",              icon: Package,   adminOnly: true  },
-  { name: "Marketing AI",      href: "/dashboard/marketing",             icon: Megaphone, adminOnly: true  },
-  { name: "Product Intel",     href: "/dashboard/recommendations",       icon: Lightbulb, adminOnly: true  },
-  { name: "Email Campaigns",   href: "/dashboard/email-campaigns",       icon: Mail,      adminOnly: true  },
-  { name: "User Tracking",     href: "/dashboard/tracking",              icon: Activity,  adminOnly: true  },
-  { name: "Analytics",         href: "/dashboard/analytics",             icon: BarChart3, adminOnly: true  },
-  { name: "Settings",          href: "/dashboard/settings",              icon: Settings,  adminOnly: true  },
+  { name: "Overview", href: "/dashboard", icon: Home, adminOnly: false },
+  { name: "Products", href: "/dashboard/products", icon: Package, adminOnly: true },
+  { name: "Marketing AI", href: "/dashboard/marketing", icon: Megaphone, adminOnly: true },
+  { name: "Product Intel", href: "/dashboard/recommendations", icon: Lightbulb, adminOnly: true },
+  { name: "User Tracking", href: "/dashboard/tracking", icon: Activity, adminOnly: true },
+  { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3, adminOnly: true },
+  { name: "Settings", href: "/dashboard/settings", icon: Settings, adminOnly: true },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -83,9 +82,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     )
   }
 
-  const navigation = isAdmin === null
-    ? allNavigation.filter((item) => !item.adminOnly)
-    : allNavigation.filter((item) => !item.adminOnly || isAdmin)
+  const navigation =
+    isAdmin === null
+      ? allNavigation.filter((item) => !item.adminOnly)
+      : allNavigation.filter((item) => !item.adminOnly || isAdmin)
 
   const displayName =
     session.user.name?.trim() || session.user.email?.trim() || "Authenticated user"
@@ -93,7 +93,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const handleSignOut = async () => {
     setSigningOut(true)
     const { error } = await signOut()
-    if (error) { setSigningOut(false); return }
+    if (error) {
+      setSigningOut(false)
+      return
+    }
     router.replace("/login")
   }
 
@@ -121,7 +124,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
                   <item.icon className="h-5 w-5" />
@@ -156,6 +159,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main className="ml-64 flex-1">
         <div className="p-8">{children}</div>
       </main>
+
+      <Toaster />
     </div>
   )
 }
