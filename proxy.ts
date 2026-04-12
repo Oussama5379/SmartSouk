@@ -42,12 +42,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  if (sessionCookie && isAdminDashboardRoute(pathname)) {
-    const isAdmin = await hasAdminAccess(request)
-    if (!isAdmin) {
-      return NextResponse.redirect(new URL("/dashboard", request.url))
-    }
-  }
+  // Bypass admin route blocking for the pitch: any logged-in user can access admin routes
+  // if (sessionCookie && isAdminDashboardRoute(pathname)) {
+  //   const isAdmin = await hasAdminAccess(request)
+  //   if (!isAdmin) {
+  //     return NextResponse.redirect(new URL("/dashboard", request.url))
+  //   }
+  // }
 
   if (sessionCookie && AUTH_PAGES.has(pathname)) {
     return NextResponse.redirect(new URL("/dashboard", request.url))

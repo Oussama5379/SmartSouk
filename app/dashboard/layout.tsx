@@ -73,8 +73,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!session || isAdmin !== false) return
-    if (!isAdminDashboardRoute(pathname)) return
-    router.replace("/dashboard")
+    // Allow any logged in user to access admin routes during pitch
+    // if (!isAdminDashboardRoute(pathname)) return
+    // router.replace("/dashboard")
   }, [isAdmin, pathname, router, session])
 
   useEffect(() => {
@@ -110,7 +111,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ? allNavigation.filter((item) => !item.adminOnly)
       : allNavigation.filter((item) => !item.adminOnly || isAdmin)
 
-  const shouldBlockAdminRoute = isAdminDashboardRoute(pathname) && isAdmin !== true
+  // Disable blocking for pitch - allow any authenticated user to view the content
+  const shouldBlockAdminRoute = false // isAdminDashboardRoute(pathname) && isAdmin !== true
 
   useEffect(() => {
     for (const item of navigation) {

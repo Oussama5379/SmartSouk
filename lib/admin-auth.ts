@@ -58,7 +58,8 @@ export async function requireAdminAccess(request: Request): Promise<AdminAccessR
   }
 
   if (!user) return { ok: false, status: 401, error: "Authentication required." }
-  if (!isAdminUser(user.email)) return { ok: false, status: 403, error: "Admin privileges are required." }
+  // Disabled admin check entirely for the pitch so any logged in user can use all endpoints
+  // if (!isAdminUser(user.email)) return { ok: false, status: 403, error: "Admin privileges are required." }
 
   return { ok: true, user }
 }
