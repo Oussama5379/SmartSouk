@@ -15,6 +15,27 @@ interface StoreSettingsResponse {
   error?: string
 }
 
+type BudgetRange = "low" | "medium" | "high"
+type PreferredFamily = "Floral" | "Oriental" | "Fresh" | "Woody"
+type TargetOccasion = "Daily" | "Wedding" | "Evening" | "Gift"
+type Mood = "Romantic" | "Confident" | "Energetic" | "Mysterious"
+
+interface RecommendationProfile {
+  username: string
+  budget_range: BudgetRange | ""
+  preferred_family: PreferredFamily | ""
+  target_occasion: TargetOccasion | ""
+  mood: Mood | ""
+}
+
+const emptyRecommendationProfile: RecommendationProfile = {
+  username: "",
+  budget_range: "",
+  preferred_family: "",
+  target_occasion: "",
+  mood: "",
+}
+
 const fallbackSettings: StoreSettings = {
   store_name: "SmartSouk",
   store_description:
@@ -28,8 +49,12 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<StoreSettings>(fallbackSettings)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
+  const [profileErrorMessage, setProfileErrorMessage] = useState("")
+  const [profileSuccessMessage, setProfileSuccessMessage] = useState("")
+  const [profile, setProfile] = useState<RecommendationProfile>(emptyRecommendationProfile)
 
   const loadSettings = async () => {
     setLoading(true)
@@ -58,7 +83,74 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void loadSettings()
+
+    const loadProfile = async () => {
+      try {
+        const response = await fetch("/api/onboarding/status", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        })
+
+        if (!response.ok) {
+          return
+        }
+
+        const body = (await response.json()) as {
+          preferences?: Partial<RecommendationProfile> | null
+        }
+
+        if (!body.preferences) {
+          return
+        }
+
+        setProfile((current) => ({ ...current, ...body.preferences }))
+      } catch {
+        // Ignore profile prefill errors.
+      }
+    }
+
+    void loadProfile()
   }, [])
+
+  const handleSaveRecommendationProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setProfileErrorMessage("")
+    setProfileSuccessMessage("")
+
+    if (
+      profile.username.trim().length < 2 ||
+      !profile.budget_range ||
+      !profile.preferred_family ||
+      !profile.target_occasion ||
+      !profile.mood
+    ) {
+      setProfileErrorMessage("Please complete all recommendation profile fields.")
+      return
+    }
+
+    setSavingProfile(true)
+
+    try {
+      const response = await fetch("/api/onboarding/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile),
+      })
+
+      const body = (await response.json()) as { error?: string }
+      if (!response.ok) {
+        setProfileErrorMessage(body.error ?? "Failed to save recommendation profile")
+        return
+      }
+
+      setProfileSuccessMessage("Recommendation profile updated")
+    } catch {
+      setProfileErrorMessage("Failed to save recommendation profile")
+    } finally {
+      setSavingProfile(false)
+    }
+  }
 
   const handleSaveSettings = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -294,6 +386,128 @@ export default function SettingsPage() {
       </Card>
 
       {/* Danger Zone */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recommendation Profile</CardTitle>
+          <CardDescription>
+            Update your personalization profile for graph-based recommendations.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={(event) => void handleSaveRecommendationProfile(event)}>
+            {profileErrorMessage ? (
+              <p className="text-sm text-destructive">{profileErrorMessage}</p>
+            ) : null}
+            {profileSuccessMessage ? (
+              <p className="text-sm text-green-700">{profileSuccessMessage}</p>
+            ) : null}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="profile-username">Username</Label>
+                <Input
+                  id="profile-username"
+                  value={profile.username}
+                  onChange={(event) =>
+                    setProfile((current) => ({ ...current, username: event.target.value }))
+                  }
+                  placeholder="e.g. Sarah"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="profile-budget">Budget Range</Label>
+                <select
+                  id="profile-budget"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={profile.budget_range}
+                  onChange={(event) =>
+                    setProfile((current) => ({
+                      ...current,
+                      budget_range: event.target.value as RecommendationProfile["budget_range"],
+                    }))
+                  }
+                >
+                  <option value="">Select budget</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="profile-family">Preferred Family</Label>
+                <select
+                  id="profile-family"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={profile.preferred_family}
+                  onChange={(event) =>
+                    setProfile((current) => ({
+                      ...current,
+                      preferred_family: event.target.value as RecommendationProfile["preferred_family"],
+                    }))
+                  }
+                >
+                  <option value="">Select family</option>
+                  <option value="Floral">Floral</option>
+                  <option value="Oriental">Oriental</option>
+                  <option value="Fresh">Fresh</option>
+                  <option value="Woody">Woody</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="profile-occasion">Target Occasion</Label>
+                <select
+                  id="profile-occasion"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={profile.target_occasion}
+                  onChange={(event) =>
+                    setProfile((current) => ({
+                      ...current,
+                      target_occasion: event.target.value as RecommendationProfile["target_occasion"],
+                    }))
+                  }
+                >
+                  <option value="">Select occasion</option>
+                  <option value="Daily">Daily</option>
+                  <option value="Wedding">Wedding</option>
+                  <option value="Evening">Evening</option>
+                  <option value="Gift">Gift</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="profile-mood">Mood</Label>
+                <select
+                  id="profile-mood"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={profile.mood}
+                  onChange={(event) =>
+                    setProfile((current) => ({
+                      ...current,
+                      mood: event.target.value as RecommendationProfile["mood"],
+                    }))
+                  }
+                >
+                  <option value="">Select mood</option>
+                  <option value="Romantic">Romantic</option>
+                  <option value="Confident">Confident</option>
+                  <option value="Energetic">Energetic</option>
+                  <option value="Mysterious">Mysterious</option>
+                </select>
+              </div>
+            </div>
+
+            <Button type="submit" disabled={savingProfile}>
+              {savingProfile ? "Saving..." : "Save Recommendation Profile"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
       <Card className="border-destructive/50">
         <CardHeader>
           <CardTitle className="text-destructive">Danger Zone</CardTitle>

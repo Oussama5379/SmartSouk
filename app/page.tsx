@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowRight, Leaf, Loader2, Package, Sparkles } from "lucide-react"
 import { ChatWidget } from "@/components/chat-widget"
+import { RecommendedSection } from "@/components/recommended-section"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -389,6 +390,8 @@ export default function StorefrontPage() {
           )}
         </div>
       </section>
+
+      <RecommendedSection />
 
       <section id="about" className="border-t bg-muted/30 py-20">
         <div className="container">

@@ -14,7 +14,7 @@ const databaseUrl = process.env.DATABASE_URL?.trim()
 const sql = databaseUrl ? neon(databaseUrl) : null
 
 const STORE_DB_FAILURE_COOLDOWN_MS = 30_000
-const STORE_DB_TIMEOUT_MS = 4_000
+const STORE_DB_TIMEOUT_MS = 15_000
 
 const DEFAULT_STORE_SETTINGS: Omit<StoreSettings, "updated_at"> = {
   store_name: "SmartSouk",
