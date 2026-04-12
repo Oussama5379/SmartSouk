@@ -20,8 +20,6 @@ Le challenge demande de concevoir une plateforme AI qui rend une PME “smart”
 2. **Sales Intelligence Agent**  
 3. **Marketing AI Assistant**
 
-> Exigence officielle: couvrir au minimum **2 piliers** avec profondeur et utilité réelle.
-
 ## Couverture des piliers dans ce repo
 
 | Pilier | Attendu par le challenge | Implémentation dans Aurea |
