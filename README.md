@@ -1,6 +1,9 @@
-# Aurea — AI-Powered Smart Business Suite
+# SmartSouk— AI-Powered Smart Business Suite
 
-Aurea est une plateforme IA pensée pour les PME, avec trois capacités intégrées: **analytics**, **agent conversationnel de vente** et **assistant marketing génératif**.  
+Our website is running at https://smartsouk.onrender.com 
+
+
+SmartSouk est une plateforme IA pensée pour les PME, avec trois capacités intégrées: **analytics**, **agent conversationnel de vente** et **assistant marketing génératif**.  
 Le dépôt contient une application web Next.js complète, des APIs IA et un backend FastAPI complémentaire.
 
 ## Problématique du challenge
