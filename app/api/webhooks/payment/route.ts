@@ -1,9 +1,10 @@
 import { getTrackingDashboardData, isTrackingConfigured, recordConfirmedPaymentOrder } from "@/lib/tracking-store"
+import { timingSafeEqual } from "node:crypto"
 import { z } from "zod"
 
 const paymentWebhookSchema = z.object({
   event_type: z.literal("payment.confirmed"),
-  payment_reference: z.string().trim().min(1).optional(),
+  payment_reference: z.string().trim().min(1),
   session_id: z.string().trim().min(1),
   user_id: z.string().trim().min(1).optional(),
   product_id: z.string().trim().min(1),
@@ -19,6 +20,16 @@ function getTrackingNotConfiguredResponse() {
     },
     { status: 500 }
   )
+}
+
+function isMatchingWebhookSecret(expectedSecret: string, providedSecret: string): boolean {
+  const expectedBuffer = Buffer.from(expectedSecret)
+  const providedBuffer = Buffer.from(providedSecret)
+  if (expectedBuffer.length !== providedBuffer.length) {
+    return false
+  }
+
+  return timingSafeEqual(expectedBuffer, providedBuffer)
 }
 
 export async function POST(request: Request) {
@@ -38,7 +49,7 @@ export async function POST(request: Request) {
   }
 
   const providedSecret = request.headers.get("x-webhook-secret")?.trim()
-  if (!providedSecret || providedSecret !== webhookSecret) {
+  if (!providedSecret || !isMatchingWebhookSecret(webhookSecret, providedSecret)) {
     return Response.json({ error: "Unauthorized webhook request" }, { status: 401 })
   }
 
@@ -62,6 +73,7 @@ export async function POST(request: Request) {
   }
 
   const order = await recordConfirmedPaymentOrder({
+    payment_reference: parsedPayload.payment_reference,
     session_id: parsedPayload.session_id,
     user_id: parsedPayload.user_id,
     product_id: parsedPayload.product_id,
@@ -74,7 +86,7 @@ export async function POST(request: Request) {
   return Response.json({
     success: true,
     event_type: parsedPayload.event_type,
-    payment_reference: parsedPayload.payment_reference ?? null,
+    payment_reference: parsedPayload.payment_reference,
     order,
     total_orders: stats.totalOrders,
     revenue: stats.totalRevenue,

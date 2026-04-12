@@ -96,6 +96,7 @@ interface OrderRow {
   quantity: string | number
   price_paid: string | number
   timestamp: string | number
+  payment_reference?: string | null
 }
 
 async function ensureTrackingSchema() {
@@ -140,6 +141,7 @@ async function ensureTrackingSchema() {
           product_id TEXT NOT NULL,
           quantity INTEGER NOT NULL DEFAULT 1,
           price_paid NUMERIC NOT NULL DEFAULT 0,
+          payment_reference TEXT,
           timestamp BIGINT NOT NULL DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT)
         );
       `
@@ -167,6 +169,27 @@ async function ensureTrackingSchema() {
       await db`
         ALTER TABLE orders
         ALTER COLUMN timestamp SET DEFAULT ((EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::BIGINT);
+      `
+
+      await db`
+        ALTER TABLE orders
+        ADD COLUMN IF NOT EXISTS payment_reference TEXT;
+      `
+
+      await db`
+        UPDATE orders
+        SET payment_reference = CONCAT('legacy_', id)
+        WHERE payment_reference IS NULL OR TRIM(payment_reference) = '';
+      `
+
+      await db`
+        ALTER TABLE orders
+        ALTER COLUMN payment_reference SET NOT NULL;
+      `
+
+      await db`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_reference
+        ON orders(payment_reference);
       `
 
       await db`
@@ -425,6 +448,7 @@ export async function trackEvent(payload: TrackEventPayload): Promise<{
 }
 
 export interface ConfirmedPaymentOrderInput {
+  payment_reference?: string
   session_id: string
   user_id?: string
   product_id: string
@@ -449,6 +473,7 @@ export async function recordConfirmedPaymentOrder(payload: ConfirmedPaymentOrder
   const userId = payload.user_id?.trim()
   const quantity = Math.max(1, Math.floor(toNumber(payload.quantity) || 1))
   const pricePaid = Math.max(0, toNumber(payload.price_paid))
+  const paymentReference = payload.payment_reference?.trim() || createId("payref")
 
   await upsertSession({
     sessionId,
@@ -457,27 +482,61 @@ export async function recordConfirmedPaymentOrder(payload: ConfirmedPaymentOrder
   })
 
   const orderId = createId("ord")
-  const [insertedOrder] = (await db`
-    INSERT INTO orders (id, session_id, user_id, product_id, quantity, price_paid)
+  const insertedRows = (await db`
+    INSERT INTO orders (id, session_id, user_id, product_id, quantity, price_paid, payment_reference)
     VALUES (
       ${orderId},
       ${sessionId},
       ${userId ?? null},
       ${productId},
       ${quantity},
-      ${pricePaid}
+      ${pricePaid},
+      ${paymentReference}
     )
-    RETURNING timestamp;
-  `) as Array<{ timestamp: string | number }>
+    ON CONFLICT (payment_reference) DO NOTHING
+    RETURNING id, session_id, user_id, product_id, quantity, price_paid, timestamp, payment_reference;
+  `) as OrderRow[]
+
+  if (insertedRows.length > 0) {
+    const insertedOrder = insertedRows[0]
+    return {
+      id: insertedOrder.id,
+      session_id: insertedOrder.session_id,
+      user_id: insertedOrder.user_id ?? undefined,
+      product_id: insertedOrder.product_id,
+      quantity: toNumber(insertedOrder.quantity),
+      price_paid: toNumber(insertedOrder.price_paid),
+      timestamp: toNumber(insertedOrder.timestamp),
+    }
+  }
+
+  const [existingOrder] = (await db`
+    SELECT
+      id,
+      session_id,
+      user_id,
+      product_id,
+      quantity,
+      price_paid,
+      timestamp,
+      payment_reference
+    FROM orders
+    WHERE payment_reference = ${paymentReference}
+    LIMIT 1;
+  `) as OrderRow[]
+
+  if (!existingOrder) {
+    throw new Error(`Failed to read order for payment reference "${paymentReference}".`)
+  }
 
   return {
-    id: orderId,
-    session_id: sessionId,
-    user_id: userId,
-    product_id: productId,
-    quantity,
-    price_paid: pricePaid,
-    timestamp: toNumber(insertedOrder?.timestamp),
+    id: existingOrder.id,
+    session_id: existingOrder.session_id,
+    user_id: existingOrder.user_id ?? undefined,
+    product_id: existingOrder.product_id,
+    quantity: toNumber(existingOrder.quantity),
+    price_paid: toNumber(existingOrder.price_paid),
+    timestamp: toNumber(existingOrder.timestamp),
   }
 }
 

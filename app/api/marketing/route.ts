@@ -1,4 +1,5 @@
 import { generateText, Output } from "ai"
+import { google } from "@ai-sdk/google"
 import { z } from "zod"
 import type { StoreProduct } from "@/lib/store-types"
 
@@ -37,10 +38,10 @@ Create compelling social media marketing content for this product. The content s
 Generate an Instagram caption, hashtags, an AI image prompt, and a strategy tip.`
 
   const result = await generateText({
-    model: "openai/gpt-4o-mini",
+    model: google("gemini-2.0-flash"),
     prompt,
     output: Output.object({ schema: campaignSchema }),
   })
 
-  return Response.json(result.object)
+  return Response.json((result as unknown as { object: unknown }).object)
 }

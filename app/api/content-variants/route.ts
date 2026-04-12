@@ -1,4 +1,5 @@
 import { streamText } from 'ai';
+import { google } from '@ai-sdk/google';
 
 export async function POST(req: Request) {
   const { product, audience, campaignGoal } = await req.json();
@@ -20,7 +21,7 @@ For each variation, provide:
 Format as JSON array with these exact keys. Make each variation unique and compelling.`;
 
   const result = streamText({
-    model: 'openai/gpt-4o-mini',
+    model: google('gemini-2.0-flash'),
     prompt,
     temperature: 0.8,
   });

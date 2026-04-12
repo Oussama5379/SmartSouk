@@ -1,5 +1,6 @@
 import { listStoreProducts } from "@/lib/store-data"
 import { getTrackingDashboardData, isTrackingConfigured } from "@/lib/tracking-store"
+import { adminErrorResponse, requireAdminAccess } from "@/lib/admin-auth"
 import type {
   DailyPerformanceSnapshot,
   InventoryAlert,
@@ -219,7 +220,10 @@ function buildInventoryAlerts(
   const topProductMap = new Map(topProducts.map((product) => [product.product_id, product]))
 
   return products
-    .filter((product) => product.stock_status === "low_stock" || product.stock_status === "out_of_stock")
+    .filter(
+      (product): product is StoreProduct & { stock_status: "low_stock" | "out_of_stock" } =>
+        product.stock_status === "low_stock" || product.stock_status === "out_of_stock"
+    )
     .map((product) => {
       const signals = topProductMap.get(product.id)
       const demandSignals = (signals?.views ?? 0) + (signals?.add_to_cart ?? 0) + (signals?.orders ?? 0) * 2
@@ -278,28 +282,26 @@ function buildCrossSellRecommendations(
     }
   }
 
-  return Array.from(pairCounts.entries())
-    .map(([key, pairSessions]) => {
-      const [baseId, pairedId] = key.split("|")
-      const baseSessions = baseCounts.get(baseId) ?? 0
-      if (baseSessions === 0) {
-        return null
-      }
+  const items: RecommendationItem[] = []
 
-      const confidence = round((pairSessions / baseSessions) * 100)
-      const support = round((pairSessions / Math.max(1, orderedProductsBySession.size)) * 100)
+  for (const [key, pairSessions] of pairCounts.entries()) {
+    const [baseId, pairedId] = key.split("|")
+    const baseSessions = baseCounts.get(baseId) ?? 0
+    if (baseSessions === 0) continue
 
-      return {
-        type: "cross_sell" as const,
-        product_id: pairedId,
-        reason: `${productNameById.get(pairedId) ?? "Companion product"} appears with ${productNameById.get(baseId) ?? "base product"} in ${pairSessions} shared carts (${confidence}% confidence, ${support}% support).`,
-        confidence,
-        potential_revenue: round((priceById.get(pairedId) ?? 0) * pairSessions, 2),
-      }
+    const confidence = round((pairSessions / baseSessions) * 100)
+    const support = round((pairSessions / Math.max(1, orderedProductsBySession.size)) * 100)
+
+    items.push({
+      type: "cross_sell",
+      product_id: pairedId,
+      reason: `${productNameById.get(pairedId) ?? "Companion product"} appears with ${productNameById.get(baseId) ?? "base product"} in ${pairSessions} shared carts (${confidence}% confidence, ${support}% support).`,
+      confidence,
+      potential_revenue: round((priceById.get(pairedId) ?? 0) * pairSessions, 2),
     })
-    .filter((item): item is RecommendationItem => Boolean(item))
-    .sort((left, right) => right.confidence - left.confidence)
-    .slice(0, 2)
+  }
+
+  return items.sort((left, right) => right.confidence - left.confidence).slice(0, 2)
 }
 
 function buildTopPerformerRecommendation(
@@ -604,7 +606,12 @@ function getTrackingNotConfiguredResponse() {
   )
 }
 
-async function handleRequest() {
+async function handleRequest(request: Request) {
+  const authResult = await requireAdminAccess(request)
+  if (!authResult.ok) {
+    return adminErrorResponse(authResult)
+  }
+
   if (!isTrackingConfigured()) {
     return getTrackingNotConfiguredResponse()
   }
@@ -617,10 +624,10 @@ async function handleRequest() {
   }
 }
 
-export async function GET() {
-  return handleRequest()
+export async function GET(request: Request) {
+  return handleRequest(request)
 }
 
-export async function POST() {
-  return handleRequest()
+export async function POST(request: Request) {
+  return handleRequest(request)
 }

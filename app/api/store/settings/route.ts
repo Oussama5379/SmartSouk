@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { adminErrorResponse, requireAdminAccess } from "@/lib/admin-auth"
 import { getStoreSettings, updateStoreSettings } from "@/lib/store-data"
 
 const updateStoreSettingsSchema = z.object({
@@ -14,6 +15,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const authResult = await requireAdminAccess(request)
+  if (!authResult.ok) {
+    return adminErrorResponse(authResult)
+  }
+
   let payload: z.infer<typeof updateStoreSettingsSchema>
   try {
     const body = await request.json()

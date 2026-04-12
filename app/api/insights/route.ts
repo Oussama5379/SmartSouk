@@ -1,4 +1,5 @@
 import { streamText } from 'ai';
+import { google } from '@ai-sdk/google';
 
 export async function POST(req: Request) {
   const { analyticsData } = await req.json();
@@ -15,7 +16,7 @@ For each insight, provide:
 Format as JSON array with objects containing: insight, impact, action, priority (high/medium/low)`;
 
   const result = streamText({
-    model: 'openai/gpt-4o-mini',
+    model: google('gemini-2.0-flash'),
     prompt,
     temperature: 0.7,
   });

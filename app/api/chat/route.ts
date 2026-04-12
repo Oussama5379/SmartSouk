@@ -1,4 +1,5 @@
 import { convertToModelMessages, streamText, type UIMessage } from "ai"
+import { google } from "@ai-sdk/google"
 import { getStoreSettings, listStoreProducts } from "@/lib/store-data"
 import {
   buildCatalogRetrievalQuery,
@@ -157,7 +158,7 @@ export async function POST(req: Request) {
     }
 
     const result = streamText({
-      model: "openai/gpt-4o-mini",
+      model: google("gemini-2.0-flash"),
       system: systemPromptSections.join("\n\n"),
       messages: await convertToModelMessages(body.messages),
     })

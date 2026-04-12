@@ -1,4 +1,5 @@
 import { getTrackingDashboardData, isTrackingConfigured, trackEvent } from "@/lib/tracking-store"
+import { adminErrorResponse, getAuthenticatedUser, requireAdminAccess } from "@/lib/admin-auth"
 import {
   isTrackEventType,
   type TrackEventMetadata,
@@ -141,6 +142,28 @@ function parseTrackPayload(value: unknown): TrackEventPayload | null {
   return payload
 }
 
+function withTrustedUserMetadata(
+  metadata: TrackEventMetadata | undefined,
+  authenticatedUser: { id: string } | null
+): TrackEventMetadata | undefined {
+  const normalizedMetadata: TrackEventMetadata = {
+    ...(metadata ?? {}),
+  }
+
+  if (authenticatedUser) {
+    normalizedMetadata.user_id = authenticatedUser.id
+    normalizedMetadata.user_type = "customer"
+    return normalizedMetadata
+  }
+
+  if (normalizedMetadata.user_type === "customer") {
+    normalizedMetadata.user_type = "guest"
+  }
+
+  delete normalizedMetadata.user_id
+  return Object.keys(normalizedMetadata).length > 0 ? normalizedMetadata : undefined
+}
+
 function getTrackingNotConfiguredResponse() {
   return Response.json(
     {
@@ -164,7 +187,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "Invalid tracking payload" }, { status: 400 })
     }
 
-    const tracked = await trackEvent(payload)
+    const authenticatedUser = await getAuthenticatedUser(request)
+    const trustedPayload: TrackEventPayload = {
+      ...payload,
+      metadata: withTrustedUserMetadata(payload.metadata, authenticatedUser),
+    }
+
+    const tracked = await trackEvent(trustedPayload)
 
     return Response.json({
       success: true,
@@ -175,7 +204,12 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authResult = await requireAdminAccess(request)
+  if (!authResult.ok) {
+    return adminErrorResponse(authResult)
+  }
+
   if (!isTrackingConfigured()) {
     return getTrackingNotConfiguredResponse()
   }

@@ -78,7 +78,7 @@ Real implementation status. No fluff.
 | Product catalog | Hardcoded in `lib/mock-data.ts` — 8 products, no DB |
 | Sessions / Events / Orders | Tracking data persists in Neon; product catalog is still hardcoded in `lib/mock-data.ts` |
 | Dashboard KPI numbers | Derived from mock data, not real analytics |
-| User authentication | Does not exist |
+| User authentication | Better Auth is wired (email/password + Google OAuth), with dashboard/admin route protection |
 | Image storage | Images returned as raw bytes, nothing saved |
 
 ---
@@ -111,6 +111,6 @@ Docs: `http://localhost:8000/docs`
 3. **Real database** — `lib/mock-data.ts` needs to become real Postgres/Supabase tables: `products`, `sessions`, `product_events`, `orders`
 4. **Move product catalog to DB** — tracking/order data is live, but products are still hardcoded in `lib/mock-data.ts`
 5. **Image storage** — save generated images to S3/R2/Supabase Storage and return a URL instead of raw bytes
-6. **Auth** — no login exists at all. Next.js middleware + Supabase Auth or NextAuth
+6. **Auth hardening** — complete role/admin policy rollout for multi-tenant access rules if needed
 7. **Retire `lunarhack/`** — standalone Express prototype, fully superseded by the Next.js app + FastAPI backend
 8. **Deploy** — Next.js → Vercel, FastAPI → Railway or Fly.io

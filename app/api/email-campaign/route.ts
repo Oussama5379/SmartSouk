@@ -1,4 +1,5 @@
 import { streamText } from 'ai';
+import { google } from '@ai-sdk/google';
 
 export async function POST(req: Request) {
   const { campaignType, product, customerSegment } = await req.json();
@@ -37,7 +38,7 @@ Include:
 Format as JSON array with email objects.`;
 
   const result = streamText({
-    model: 'openai/gpt-4o-mini',
+    model: google('gemini-2.0-flash'),
     prompt,
     temperature: 0.8,
   });
