@@ -54,7 +54,7 @@ Le prototype est appliqué à un **secteur e-commerce artisanal** (storefront Sm
 ## Structure du projet
 
 ```text
-Aurea/
+SmartSouk/
 ├── app/                      # UI Next.js + routes API
 │   ├── page.tsx              # storefront + chat agent
 │   ├── dashboard/            # analytics, marketing, tracking, products, settings
