@@ -16,7 +16,7 @@ For each insight, provide:
 Format as JSON array with objects containing: insight, impact, action, priority (high/medium/low)`;
 
   const result = streamText({
-    model: google('gemini-3.1-flash'),
+    model: google('gemini-3.1-flash-lite'),
     prompt,
     temperature: 0.7,
   });
