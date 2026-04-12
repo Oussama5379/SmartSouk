@@ -26,6 +26,7 @@ const DASHBOARD_LAYOUT_CACHE_TTL_MS = 10 * 60 * 1000
 
 interface DashboardLayoutCacheSnapshot {
   storeName: string
+  siteIconUrl?: string
   isAdmin: boolean | null
 }
 
@@ -48,6 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     []
   )
   const [storeName, setStoreName] = useState(cachedSnapshot?.storeName ?? "SmartSouk")
+  const [siteIconUrl, setSiteIconUrl] = useState(cachedSnapshot?.siteIconUrl ?? "")
   const [signingOut, setSigningOut] = useState(false)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(cachedSnapshot?.isAdmin ?? null)
 
@@ -83,9 +85,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           headers: { "Content-Type": "application/json" },
         })
         if (!res.ok) return
-        const body = (await res.json()) as { settings?: { store_name?: string } }
+        const body = (await res.json()) as { settings?: { store_name?: string; site_icon_url?: string } }
         const name = body.settings?.store_name?.trim()
         if (name) setStoreName(name)
+        const iconUrl = body.settings?.site_icon_url?.trim()
+        if (iconUrl !== undefined) setSiteIconUrl(iconUrl)
       } catch {
         // Keep fallback store name.
       }
@@ -96,9 +100,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     writeClientCache<DashboardLayoutCacheSnapshot>(DASHBOARD_LAYOUT_CACHE_KEY, {
       storeName,
+      siteIconUrl,
       isAdmin,
     })
-  }, [isAdmin, storeName])
+  }, [isAdmin, storeName, siteIconUrl])
 
   const navigation =
     isAdmin === null
@@ -140,9 +145,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center border-b px-6">
             <Link href="/" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-                {storeName.charAt(0).toUpperCase() || "S"}
-              </div>
+              {siteIconUrl ? (
+                <img src={siteIconUrl} alt="Store Icon" className="h-8 w-8 rounded-lg object-contain" />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
+                  {storeName.charAt(0).toUpperCase() || "S"}
+                </div>
+              )}
               <span className="text-lg font-semibold">{storeName}</span>
             </Link>
           </div>

@@ -289,9 +289,13 @@ export default function StorefrontPage() {
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-              {settings.store_name.charAt(0).toUpperCase() || "S"}
-            </div>
+            {settings.site_icon_url ? (
+              <img src={settings.site_icon_url} alt="Store Icon" className="h-8 w-8 rounded-lg object-contain" />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
+                {settings.store_name.charAt(0).toUpperCase() || "S"}
+              </div>
+            )}
             <span className="text-lg font-semibold">{settings.store_name}</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
