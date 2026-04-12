@@ -10,14 +10,14 @@ type AdminAccessResult =
   | { ok: true; user: AuthenticatedUser }
   | { ok: false; status: number; error: string }
 
-const configuredAdminEmails = new Set(
-  [process.env.ADMIN_EMAILS, process.env.AUTH_ADMIN_EMAILS]
-    .flatMap((v) => v?.split(",") ?? [])
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean)
-)
-
 function isAdminUser(email: string | null): boolean {
+  const configuredAdminEmails = new Set(
+    [process.env.ADMIN_EMAILS, process.env.AUTH_ADMIN_EMAILS]
+      .flatMap((v) => v?.split(",") ?? [])
+      .map((v) => v.trim().toLowerCase())
+      .filter(Boolean)
+  )
+
   // Security: deny by default when no admin emails configured — never grant access to everyone.
   if (configuredAdminEmails.size === 0) return false
   const normalized = email?.trim().toLowerCase()

@@ -24,7 +24,8 @@ const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim()
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
 const resendApiKey = process.env.RESEND_API_KEY?.trim()
 const fromEmail = process.env.EMAIL_FROM?.trim() || "Aurea <onboarding@resend.dev>"
-const baseURL =
+// Read dynamically to support runtime env vars
+const getBaseURL = () => 
   process.env.BETTER_AUTH_URL?.trim() ||
   process.env.NEXT_PUBLIC_BETTER_AUTH_URL?.trim() ||
   "http://localhost:3000"
@@ -33,9 +34,9 @@ const resend = resendApiKey ? new Resend(resendApiKey) : null
 
 export const auth = betterAuth({
   appName: "Aurea",
-  baseURL,
+  baseURL: getBaseURL(),
   secret,
-  trustedOrigins: [baseURL].filter(Boolean),
+  trustedOrigins: [getBaseURL()].filter(Boolean),
   database: pool,
   emailAndPassword: {
     enabled: true,
