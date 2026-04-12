@@ -668,7 +668,7 @@ export default function MarketingPage() {
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.error || result.details || "Unable to send campaign email.",
+          result.details || result.error || "Unable to send campaign email.",
         );
       }
 
