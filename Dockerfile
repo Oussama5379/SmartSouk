@@ -22,7 +22,9 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 # Build the Next.js app
-RUN pnpm build
+# We pass a temporary dummy secret so Next.js static generation doesn't crash.
+# Render will inject your REAL secret at runtime via the dashboard env vars!
+RUN BETTER_AUTH_SECRET=dummy_secret_for_build_step_only_12345 pnpm build
 
 # Create a bash script to start both the Python backend and the Next.js frontend
 RUN echo '#!/bin/bash' > start.sh && \
