@@ -1,12 +1,12 @@
 import { z } from "zod"
 import { getStoreProductById } from "@/lib/store-data"
+import { getAuthenticatedUser } from "@/lib/admin-auth"
 import { isTrackingConfigured, recordConfirmedPaymentOrder } from "@/lib/tracking-store"
 
 const purchaseSchema = z.object({
   session_id: z.string().trim().min(1),
   product_id: z.string().trim().min(1),
   quantity: z.coerce.number().int().positive().default(1),
-  user_id: z.string().trim().min(1).optional(),
 })
 
 export async function POST(request: Request) {
@@ -40,13 +40,15 @@ export async function POST(request: Request) {
 
   const quantity = Math.max(1, payload.quantity)
   const pricePaid = Number((product.price_tnd * quantity).toFixed(2))
+  const authenticatedUser = await getAuthenticatedUser(request)
+  const trustedUserId = authenticatedUser?.id
 
   const trackingEnabled = isTrackingConfigured()
 
   const order = trackingEnabled
     ? await recordConfirmedPaymentOrder({
         session_id: payload.session_id,
-        user_id: payload.user_id,
+        user_id: trustedUserId,
         product_id: product.id,
         quantity,
         price_paid: pricePaid,
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
     : {
         id: `sim_ord_${Date.now()}`,
         session_id: payload.session_id,
-        user_id: payload.user_id,
+        user_id: trustedUserId,
         product_id: product.id,
         quantity,
         price_paid: pricePaid,

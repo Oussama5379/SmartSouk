@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { adminErrorResponse, requireAdminAccess } from "@/lib/admin-auth"
 import { createStoreProduct, listStoreProducts } from "@/lib/store-data"
 
 const createProductSchema = z.object({
@@ -16,6 +17,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authResult = await requireAdminAccess(request)
+  if (!authResult.ok) {
+    return adminErrorResponse(authResult)
+  }
+
   let payload: z.infer<typeof createProductSchema>
 
   try {

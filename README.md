@@ -9,6 +9,7 @@ An AI platform for small and medium businesses combining marketing automation, s
 ### Frontend + Next.js API layer (`/`)
 - **Next.js 16** App Router, TypeScript, Tailwind CSS v4, shadcn/ui
 - Dashboard with pages: Overview, Products, Marketing AI, Product Intel, Email Campaigns, User Tracking, Analytics, Settings
+- Better Auth login/signup flow (`/login`, `/signup`) with email/password and Google OAuth
 - Floating chat widget on the storefront (sales agent)
 - All AI calls go through Next.js API routes, which proxy to OpenAI via Vercel AI SDK
 
@@ -123,9 +124,15 @@ HF_TOKEN=hf_...              # HuggingFace token for image generation
 GEMINI_API_KEY=AIza...       # Gemini 2.5 Flash Lite for prompt enhancement
 FASTAPI_URL=http://localhost:8000   # FastAPI backend URL (optional, for proxying)
 DATABASE_URL=postgresql://...       # Neon Postgres URL for sessions/events/orders tracking
+BETTER_AUTH_SECRET=...              # 32+ char secret used by Better Auth
+BETTER_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
+GOOGLE_CLIENT_ID=...                # Google OAuth app client ID
+GOOGLE_CLIENT_SECRET=...            # Google OAuth app client secret
 UPSTASH_REDIS_REST_URL=https://...  # Upstash Redis REST URL for session context cache
 UPSTASH_REDIS_REST_TOKEN=...        # Upstash Redis REST token
 PAYMENT_WEBHOOK_SECRET=...          # Shared secret used by /api/webhooks/payment
+ADMIN_EMAILS=admin@example.com      # Comma-separated admin emails allowed for protected admin APIs
 ```
 
 ### FastAPI backend (`backend/.env`)
@@ -141,17 +148,43 @@ HF_TOKEN=hf_...
 ### Next.js API routes (serverless, streaming)
 | Endpoint | Method | What it does |
 |---|---|---|
+| `/api/auth/[...all]` | GET/POST | Better Auth handler for session, email/password, and OAuth flows |
 | `/api/chat` | POST | Streaming sales chat with session/page/product context + retrieved catalog grounding (RAG) |
 | `/api/marketing` | POST | Campaign generation — caption, hashtags, image prompt, strategy |
 | `/api/content-variants` | POST | 3 tone variants (Professional / Fun / Storytelling) |
 | `/api/insights` | POST | AI analysis of analytics data |
-| `/api/recommendations` | GET/POST | Deterministic market-basket/RFM/inventory signals + analytics RAG synthesis for insight summary and actions |
+| `/api/recommendations` | GET/POST | Deterministic market-basket/RFM/inventory signals + analytics RAG synthesis for insight summary and actions (protected) |
 | `/api/email-campaign` | POST | 3-email sequence (Hook → Social Proof → Urgency) |
 | `/api/qualify-lead` | POST | JSON lead score + recommendations with tool-calling |
 | `/api/generate-image` | POST | FLUX.1-schnell image generation |
 | `/api/enhance-prompt` | POST | Gemini prompt enhancement |
-| `/api/track` | POST/GET | Neon-backed session + product tracking, including UTM attribution capture |
-| `/api/webhooks/payment` | POST | Secure server-side order logging from confirmed payment webhook events |
+| `/api/track` | POST/GET | POST ingests session/product events; GET returns tracking dashboard data and now requires authenticated admin access |
+| `/api/webhooks/payment` | POST | Secure server-side order logging from confirmed payment webhooks with idempotency enforced by `payment_reference` |
+
+### Admin API protection
+- `POST /api/store/products`, `PATCH/DELETE /api/store/products/[id]`, `PUT /api/store/settings`, `GET/POST /api/recommendations`, and `GET /api/track` require an authenticated session.
+- If `ADMIN_EMAILS` is configured, only those emails (or users with `role = "admin"`) can call protected admin routes.
+- `POST /api/track` and `POST /api/store/purchase` now ignore spoofed `user_id` payload values and trust authenticated session identity when present.
+
+### Better Auth + Neon migrations
+```bash
+pnpm auth:generate   # generates SQL at db/migrations/better-auth.sql
+pnpm auth:migrate    # applies Better Auth tables to current DATABASE_URL
+```
+
+These commands are repeatable and safe for branch databases. Re-run `auth:migrate` after enabling new Better Auth options/plugins.
+
+### Neon branch-per-git-branch workflow
+```bash
+# Create a Neon branch for your current git branch (or pass -BranchName)
+pnpm neon:branch -- -ProjectId <neon-project-id> -ParentBranch main
+
+# Equivalent raw CLI example
+neon branches create --project-id <neon-project-id> --name <git-branch-name> --parent main
+neon connection-string <git-branch-name> --project-id <neon-project-id>
+```
+
+Set `DATABASE_URL` from that branch connection string, then run `pnpm auth:migrate` so auth users/sessions remain isolated per branch.
 
 ### FastAPI backend (long-running, Python)
 | Endpoint | Method | What it does |
@@ -167,7 +200,7 @@ HF_TOKEN=hf_...
 
 ### Must-have for a real product
 - [ ] **Product catalog DB** — tracking now uses Neon, but products are still hardcoded in `lib/mock-data.ts`.
-- [ ] **Auth** — no login, no user accounts. Every visitor sees the same dashboard.
+- [x] **Auth** — Better Auth wired with email/password + Google sign-in, protected dashboard/admin APIs, and Neon-backed auth tables.
 - [ ] **Wire Next.js → FastAPI** — the Next.js `generate-image` and `enhance-prompt` routes duplicate the FastAPI logic. Pick one and proxy to it.
 - [x] **`.env.local.example`** — root-level env example file is now included.
 

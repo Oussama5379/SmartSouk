@@ -1,4 +1,5 @@
 import { generateText, tool } from "ai"
+import { google } from "@ai-sdk/google"
 import { z } from "zod"
 import { getStoreSettings, listStoreProducts } from "@/lib/store-data"
 import type { StoreProduct } from "@/lib/store-types"
@@ -101,7 +102,7 @@ export async function POST(req: Request) {
     })
 
     const result = await generateText({
-      model: "openai/gpt-4o-mini",
+      model: google("gemini-2.0-flash"),
       system: `You are a sales qualification assistant for ${settings.store_name}.
 Your task is to score this lead and recommend the best next action.
 You must call scoreAndRecommend exactly once with a pragmatic sales assessment.`,

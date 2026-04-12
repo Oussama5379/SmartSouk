@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowRight, Leaf, Loader2, Package, Sparkles, Wand2 } from "lucide-react"
+import { ArrowRight, Leaf, Loader2, Package, Sparkles } from "lucide-react"
 import { ChatWidget } from "@/components/chat-widget"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -213,12 +213,6 @@ export default function StorefrontPage() {
             </Link>
           </nav>
           <div className="flex items-center gap-4">
-            <Link href="/campaign">
-              <Button variant="outline" size="sm">
-                <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-                Campaign Studio
-              </Button>
-            </Link>
             <Link href="/dashboard">
               <Button variant="outline" size="sm">
                 Dashboard

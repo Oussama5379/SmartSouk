@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { adminErrorResponse, requireAdminAccess } from "@/lib/admin-auth"
 import { deleteStoreProduct, getStoreProductById, updateStoreProduct } from "@/lib/store-data"
 
 const updateProductSchema = z.object({
@@ -30,6 +31,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const authResult = await requireAdminAccess(request)
+  if (!authResult.ok) {
+    return adminErrorResponse(authResult)
+  }
+
   const productId = await getProductId(context)
   if (!productId) {
     return Response.json({ error: "Product id is required" }, { status: 400 })
@@ -66,6 +72,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const authResult = await requireAdminAccess(_request)
+  if (!authResult.ok) {
+    return adminErrorResponse(authResult)
+  }
+
   const productId = await getProductId(context)
   if (!productId) {
     return Response.json({ error: "Product id is required" }, { status: 400 })

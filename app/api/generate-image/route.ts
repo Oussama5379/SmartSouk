@@ -80,7 +80,7 @@ async function generateWithHuggingFace(prompt: string): Promise<Buffer> {
         parameters: { num_inference_steps: HF_IMAGE_STEPS },
       });
 
-      const arrayBuffer = await (result as Blob).arrayBuffer();
+      const arrayBuffer = await (result as unknown as Blob).arrayBuffer();
       return Buffer.from(arrayBuffer);
     } catch (error) {
       const status = getStatusFromError(error);
