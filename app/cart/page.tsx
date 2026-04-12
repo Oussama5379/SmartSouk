@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useCart } from "@/hooks/use-cart"
 import { useSessionTracking } from "@/hooks/use-session-tracking"
+import { useSession } from "@/lib/auth-client"
 import type { StoreProduct } from "@/lib/store-types"
 
 interface StoreProductsResponse {
@@ -27,11 +28,41 @@ function getCategoryEmoji(category: StoreProduct["category"]): string {
 
 export default function CartPage() {
   const { sessionId } = useSessionTracking()
+  const { data: session } = useSession()
   const { ready, items, setItemQuantity, removeItem, clearCart } = useCart()
   const [products, setProducts] = useState<StoreProduct[]>([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [checkingOut, setCheckingOut] = useState(false)
   const [message, setMessage] = useState("")
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    if (!session?.user) {
+      setIsAdmin(false)
+      return
+    }
+
+    let active = true
+    void fetch("/api/auth/is-admin", {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    })
+      .then((response) => response.json() as Promise<{ isAdmin?: boolean }>)
+      .then((payload) => {
+        if (active) {
+          setIsAdmin(Boolean(payload.isAdmin))
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setIsAdmin(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.user])
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -132,6 +163,27 @@ export default function CartPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (isAdmin) {
+    return (
+      <div className="min-h-screen bg-background">
+        <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center justify-center px-4 text-center">
+          <h1 className="text-3xl font-bold">Cart is disabled for admin accounts</h1>
+          <p className="mt-3 text-muted-foreground">
+            Use the dashboard to manage products and orders from your own storefront.
+          </p>
+          <div className="mt-6 flex items-center gap-3">
+            <Button asChild>
+              <Link href="/dashboard">Go to Dashboard</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/">Back to Store</Link>
+            </Button>
+          </div>
+        </main>
       </div>
     )
   }
