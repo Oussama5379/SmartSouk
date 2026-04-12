@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Copy, Check, Sparkles, Image as ImageIcon } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 interface Article {
@@ -60,58 +61,112 @@ interface CaptionItem {
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STYLE_PRESETS: Record<string, Partial<OverlayConfig>> = {
   luxury: {
-    textColor: "#ffffff", taglineColor: "#e8d5b0",
-    bgColor: "#1a1008", borderColor: "#b98b2e",
-    opacity: 88, overlayBlur: 0,
-    borderWidth: 2, borderRadius: 5,
-    fontSize: 18, letterSpacing: 3, padding: 12,
-    uppercase: true, showBorder: true, textShadow: false,
-    position: "center", textAlign: "center",
+    textColor: "#ffffff",
+    taglineColor: "#e8d5b0",
+    bgColor: "#1a1008",
+    borderColor: "#b98b2e",
+    opacity: 88,
+    overlayBlur: 0,
+    borderWidth: 2,
+    borderRadius: 5,
+    fontSize: 18,
+    letterSpacing: 3,
+    padding: 12,
+    uppercase: true,
+    showBorder: true,
+    textShadow: false,
+    position: "center",
+    textAlign: "center",
   },
   minimal: {
-    textColor: "#1a1a1a", taglineColor: "#666666",
-    bgColor: "#ffffff", borderColor: "#dddddd",
-    opacity: 92, overlayBlur: 0,
-    borderWidth: 1, borderRadius: 6,
-    fontSize: 15, letterSpacing: 1, padding: 10,
-    uppercase: false, showBorder: true, textShadow: false,
-    position: "bottom-center", textAlign: "center",
+    textColor: "#1a1a1a",
+    taglineColor: "#666666",
+    bgColor: "#ffffff",
+    borderColor: "#dddddd",
+    opacity: 92,
+    overlayBlur: 0,
+    borderWidth: 1,
+    borderRadius: 6,
+    fontSize: 15,
+    letterSpacing: 1,
+    padding: 10,
+    uppercase: false,
+    showBorder: true,
+    textShadow: false,
+    position: "bottom-center",
+    textAlign: "center",
   },
   frosted: {
-    textColor: "#ffffff", taglineColor: "#ddeeff",
-    bgColor: "#ffffff", borderColor: "#ffffff",
-    opacity: 18, overlayBlur: 20,
-    borderWidth: 1, borderRadius: 16,
-    fontSize: 18, letterSpacing: 2, padding: 18,
-    uppercase: false, showBorder: true, textShadow: true,
-    position: "center", textAlign: "center",
+    textColor: "#ffffff",
+    taglineColor: "#ddeeff",
+    bgColor: "#ffffff",
+    borderColor: "#ffffff",
+    opacity: 18,
+    overlayBlur: 20,
+    borderWidth: 1,
+    borderRadius: 16,
+    fontSize: 18,
+    letterSpacing: 2,
+    padding: 18,
+    uppercase: false,
+    showBorder: true,
+    textShadow: true,
+    position: "center",
+    textAlign: "center",
   },
   bold: {
-    textColor: "#ffffff", taglineColor: "#ffe0a0",
-    bgColor: "#c45d1b", borderColor: "#c45d1b",
-    opacity: 95, overlayBlur: 0,
-    borderWidth: 0, borderRadius: 4,
-    fontSize: 20, letterSpacing: 2, padding: 14,
-    uppercase: true, showBorder: false, textShadow: false,
-    position: "bottom-center", textAlign: "center",
+    textColor: "#ffffff",
+    taglineColor: "#ffe0a0",
+    bgColor: "#c45d1b",
+    borderColor: "#c45d1b",
+    opacity: 95,
+    overlayBlur: 0,
+    borderWidth: 0,
+    borderRadius: 4,
+    fontSize: 20,
+    letterSpacing: 2,
+    padding: 14,
+    uppercase: true,
+    showBorder: false,
+    textShadow: false,
+    position: "bottom-center",
+    textAlign: "center",
   },
   cinematic: {
-    textColor: "#ffffff", taglineColor: "#999999",
-    bgColor: "#000000", borderColor: "#000000",
-    opacity: 72, overlayBlur: 0,
-    borderWidth: 0, borderRadius: 0,
-    fontSize: 22, letterSpacing: 5, padding: 20,
-    uppercase: true, showBorder: false, textShadow: false,
-    position: "bottom-center", textAlign: "left",
+    textColor: "#ffffff",
+    taglineColor: "#999999",
+    bgColor: "#000000",
+    borderColor: "#000000",
+    opacity: 72,
+    overlayBlur: 0,
+    borderWidth: 0,
+    borderRadius: 0,
+    fontSize: 22,
+    letterSpacing: 5,
+    padding: 20,
+    uppercase: true,
+    showBorder: false,
+    textShadow: false,
+    position: "bottom-center",
+    textAlign: "left",
   },
   outline: {
-    textColor: "#ffffff", taglineColor: "#ffffff",
-    bgColor: "#000000", borderColor: "#ffffff",
-    opacity: 0, overlayBlur: 0,
-    borderWidth: 2, borderRadius: 0,
-    fontSize: 18, letterSpacing: 4, padding: 12,
-    uppercase: true, showBorder: true, textShadow: true,
-    position: "center", textAlign: "center",
+    textColor: "#ffffff",
+    taglineColor: "#ffffff",
+    bgColor: "#000000",
+    borderColor: "#ffffff",
+    opacity: 0,
+    overlayBlur: 0,
+    borderWidth: 2,
+    borderRadius: 0,
+    fontSize: 18,
+    letterSpacing: 4,
+    padding: 12,
+    uppercase: true,
+    showBorder: true,
+    textShadow: true,
+    position: "center",
+    textAlign: "center",
   },
 };
 
@@ -126,21 +181,49 @@ const POSITIONS: Record<string, React.CSSProperties> = {
 };
 
 const DEFAULT_ARTICLES: Article[] = [
-  { id: "a1", title: "New Product Launch Spotlight", summary: "Show the hero product with premium lighting, clean backdrop, and a high-end campaign feel." },
-  { id: "a2", title: "Limited-Time Offer Campaign", summary: "Focus on urgency, bold hero composition, and a visual that clearly sells the main offer." },
-  { id: "a3", title: "Brand Story Hero Visual", summary: "Highlight craftsmanship, material quality, and a premium brand mood for social media." },
+  {
+    id: "a1",
+    title: "New Product Launch Spotlight",
+    summary:
+      "Show the hero product with premium lighting, clean backdrop, and a high-end campaign feel.",
+  },
+  {
+    id: "a2",
+    title: "Limited-Time Offer Campaign",
+    summary:
+      "Focus on urgency, bold hero composition, and a visual that clearly sells the main offer.",
+  },
+  {
+    id: "a3",
+    title: "Brand Story Hero Visual",
+    summary:
+      "Highlight craftsmanship, material quality, and a premium brand mood for social media.",
+  },
 ];
 
 const DEFAULT_OVERLAY: OverlayConfig = {
-  labelText: "Campaign Label", taglineText: "",
-  style: "luxury", position: "center", textAlign: "center",
-  textColor: "#ffffff", taglineColor: "#e8d5b0",
-  bgColor: "#1a1008", borderColor: "#b98b2e",
-  opacity: 88, overlayBlur: 0, bgBlur: 0,
-  fontSize: 18, letterSpacing: 3, padding: 12,
-  borderWidth: 2, borderRadius: 5,
-  showOverlay: true, showTagline: true,
-  uppercase: true, showBorder: true, textShadow: false,
+  labelText: "Campaign Label",
+  taglineText: "",
+  style: "luxury",
+  position: "center",
+  textAlign: "center",
+  textColor: "#ffffff",
+  taglineColor: "#e8d5b0",
+  bgColor: "#1a1008",
+  borderColor: "#b98b2e",
+  opacity: 88,
+  overlayBlur: 0,
+  bgBlur: 0,
+  fontSize: 18,
+  letterSpacing: 3,
+  padding: 12,
+  borderWidth: 2,
+  borderRadius: 5,
+  showOverlay: true,
+  showTagline: true,
+  uppercase: true,
+  showBorder: true,
+  textShadow: false,
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -152,15 +235,29 @@ function hexToRgb(hex: string) {
   };
 }
 
-function computeOverlayStyle(cfg: OverlayConfig, imageLoaded: boolean): React.CSSProperties {
+function computeOverlayStyle(
+  cfg: OverlayConfig,
+  imageLoaded: boolean,
+): React.CSSProperties {
   if (!imageLoaded || !cfg.showOverlay) return { display: "none" };
 
   const isCinematic = cfg.style === "cinematic";
   const { r, g, b } = hexToRgb(cfg.bgColor);
   const blur = cfg.overlayBlur > 0 ? `blur(${cfg.overlayBlur}px)` : "none";
   const posStyles = isCinematic
-    ? { bottom: "0", left: "0", right: "0", top: "auto", width: "100%", maxWidth: "100%" }
-    : { ...(POSITIONS[cfg.position] || POSITIONS.center), minWidth: "40%", maxWidth: "74%" };
+    ? {
+        bottom: "0",
+        left: "0",
+        right: "0",
+        top: "auto",
+        width: "100%",
+        maxWidth: "100%",
+      }
+    : {
+        ...(POSITIONS[cfg.position] || POSITIONS.center),
+        minWidth: "40%",
+        maxWidth: "74%",
+      };
 
   return {
     position: "absolute",
@@ -168,9 +265,10 @@ function computeOverlayStyle(cfg: OverlayConfig, imageLoaded: boolean): React.CS
     background: `rgba(${r},${g},${b},${cfg.opacity / 100})`,
     backdropFilter: blur,
     WebkitBackdropFilter: blur,
-    border: cfg.showBorder && cfg.borderWidth > 0 && !isCinematic
-      ? `${cfg.borderWidth}px solid ${cfg.borderColor}`
-      : "none",
+    border:
+      cfg.showBorder && cfg.borderWidth > 0 && !isCinematic
+        ? `${cfg.borderWidth}px solid ${cfg.borderColor}`
+        : "none",
     borderRadius: isCinematic ? "0" : `${cfg.borderRadius}px`,
     fontSize: `${cfg.fontSize}px`,
     letterSpacing: `${cfg.letterSpacing}px`,
@@ -180,6 +278,50 @@ function computeOverlayStyle(cfg: OverlayConfig, imageLoaded: boolean): React.CS
     wordBreak: "break-word",
     ...posStyles,
   };
+}
+
+function parseRecipientEmails(input: string): string[] {
+  return Array.from(
+    new Set(
+      input
+        .split(/[\n,;]+/)
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+async function blobUrlToDataUrl(blobUrl: string): Promise<string> {
+  const response = await fetch(blobUrl);
+  if (!response.ok) {
+    throw new Error("Unable to prepare generated image for email delivery.");
+  }
+
+  const blob = await response.blob();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const value = reader.result;
+      if (typeof value === "string" && value.startsWith("data:image/")) {
+        resolve(value);
+        return;
+      }
+
+      reject(
+        new Error(
+          "Generated image could not be converted to a sendable format.",
+        ),
+      );
+    };
+    reader.onerror = () => {
+      reject(
+        new Error(
+          "Generated image could not be converted to a sendable format.",
+        ),
+      );
+    };
+    reader.readAsDataURL(blob);
+  });
 }
 
 // ─── COPY BUTTON ──────────────────────────────────────────────────────────────
@@ -203,28 +345,51 @@ function CopyButton({ text }: { text: string }) {
 
 // ─── SLIDER ROW ───────────────────────────────────────────────────────────────
 function SliderRow({
-  label, value, min, max, unit = "px",
+  label,
+  value,
+  min,
+  max,
+  unit = "px",
   onChange,
 }: {
-  label: string; value: number; min: number; max: number; unit?: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  unit?: string;
   onChange: (v: number) => void;
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs font-semibold text-muted-foreground w-28 shrink-0">{label}</span>
+      <span className="text-xs font-semibold text-muted-foreground w-28 shrink-0">
+        {label}
+      </span>
       <Slider
-        min={min} max={max} step={1}
+        min={min}
+        max={max}
+        step={1}
         value={[value]}
         onValueChange={([v]) => onChange(v)}
         className="flex-1"
       />
-      <span className="text-xs font-bold text-primary w-9 text-right shrink-0">{value}{unit}</span>
+      <span className="text-xs font-bold text-primary w-9 text-right shrink-0">
+        {value}
+        {unit}
+      </span>
     </div>
   );
 }
 
 // ─── COLOR ROW ────────────────────────────────────────────────────────────────
-function ColorRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function ColorRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-lg px-3 py-2">
       <span className="text-xs font-semibold flex-1">{label}</span>
@@ -256,7 +421,9 @@ export default function MarketingPage() {
   const [roughPrompt, setRoughPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState("Ready.");
-  const [statusTone, setStatusTone] = useState<"normal" | "ok" | "error">("normal");
+  const [statusTone, setStatusTone] = useState<"normal" | "ok" | "error">(
+    "normal",
+  );
   const [enhancedPrompt, setEnhancedPrompt] = useState("");
   const [provider, setProvider] = useState("pending");
   const [lastGeneratedPrompt, setLastGeneratedPrompt] = useState("");
@@ -276,6 +443,12 @@ export default function MarketingPage() {
   const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
   const [captionError, setCaptionError] = useState("");
 
+  // Email send state
+  const [emailRecipients, setEmailRecipients] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [campaignCopy, setCampaignCopy] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
   const updateCfg = useCallback((patch: Partial<OverlayConfig>) => {
     setCfg((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -292,7 +465,26 @@ export default function MarketingPage() {
     };
   }, []);
 
-  const selectedArticle = articles.find((a) => a.id === selectedId) || articles[0];
+  const selectedArticle =
+    articles.find((a) => a.id === selectedId) || articles[0];
+
+  useEffect(() => {
+    if (!emailSubject && selectedArticle?.title) {
+      setEmailSubject(selectedArticle.title);
+    }
+  }, [selectedArticle, emailSubject]);
+
+  useEffect(() => {
+    if (campaignCopy || captions.length === 0) {
+      return;
+    }
+
+    const firstCaption = captions[0];
+    const initialCopy = [firstCaption.caption, firstCaption.hashtags]
+      .filter(Boolean)
+      .join("\n\n");
+    setCampaignCopy(initialCopy);
+  }, [captions, campaignCopy]);
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -332,7 +524,10 @@ export default function MarketingPage() {
 
       if (!imgRes.ok) {
         const errData = await imgRes.json().catch(() => ({}));
-        throw new Error((errData.error || "Image generation failed.") + (errData.details ? ` ${errData.details}` : ""));
+        throw new Error(
+          (errData.error || "Image generation failed.") +
+            (errData.details ? ` ${errData.details}` : ""),
+        );
       }
 
       const blob = await imgRes.blob();
@@ -356,7 +551,11 @@ export default function MarketingPage() {
   function handleAddArticle(e: React.FormEvent) {
     e.preventDefault();
     if (!newTitle.trim() || !newSummary.trim()) return;
-    const article = { id: `a${Date.now()}`, title: newTitle.trim(), summary: newSummary.trim() };
+    const article = {
+      id: `a${Date.now()}`,
+      title: newTitle.trim(),
+      summary: newSummary.trim(),
+    };
     setArticles((prev) => [article, ...prev]);
     setSelectedId(article.id);
     setNewTitle("");
@@ -394,6 +593,112 @@ export default function MarketingPage() {
     }
   }
 
+  async function handleSendCampaignEmail() {
+    if (isSendingEmail) {
+      return;
+    }
+
+    const recipients = parseRecipientEmails(emailRecipients);
+    if (recipients.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Recipient emails required",
+        description:
+          "Add one or more recipient emails separated by commas or new lines.",
+      });
+      return;
+    }
+
+    const subject = emailSubject.trim();
+    if (!subject) {
+      toast({
+        variant: "destructive",
+        title: "Subject is required",
+        description: "Enter an email subject before sending.",
+      });
+      return;
+    }
+
+    const copy = campaignCopy.trim();
+    if (!copy) {
+      toast({
+        variant: "destructive",
+        title: "Campaign copy is required",
+        description: "Add the campaign text that should appear in the email.",
+      });
+      return;
+    }
+
+    if (!imageUrl) {
+      toast({
+        variant: "destructive",
+        title: "Image required",
+        description: "Generate an image before sending the campaign email.",
+      });
+      return;
+    }
+
+    setIsSendingEmail(true);
+
+    try {
+      const emailImageSource = imageUrl.startsWith("blob:")
+        ? await blobUrlToDataUrl(imageUrl)
+        : imageUrl;
+
+      const response = await fetch("/api/marketing/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient_emails: recipients,
+          subject,
+          campaign_copy: copy,
+          image_url: emailImageSource,
+        }),
+      });
+
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        details?: string;
+        sent_count?: number;
+        rejected?: string[];
+      };
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || result.details || "Unable to send campaign email.",
+        );
+      }
+
+      const sentCount =
+        typeof result.sent_count === "number"
+          ? result.sent_count
+          : recipients.length;
+      const rejectedCount = Array.isArray(result.rejected)
+        ? result.rejected.length
+        : 0;
+
+      toast({
+        title: "Campaign email sent",
+        description:
+          rejectedCount > 0
+            ? `Sent to ${sentCount} recipient(s); ${rejectedCount} address(es) were rejected.`
+            : `Sent to ${sentCount} recipient(s).`,
+      });
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Email sending failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Unexpected error while sending the campaign email.",
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  }
+
   const overlayStyle = computeOverlayStyle(cfg, imageLoaded);
   const shadow = cfg.textShadow
     ? "0 2px 10px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.5)"
@@ -403,8 +708,8 @@ export default function MarketingPage() {
     statusTone === "error"
       ? "text-destructive"
       : statusTone === "ok"
-      ? "text-green-700 dark:text-green-400"
-      : "text-foreground";
+        ? "text-green-700 dark:text-green-400"
+        : "text-foreground";
 
   return (
     <div className="space-y-6">
@@ -418,7 +723,6 @@ export default function MarketingPage() {
 
       {/* Top grid: Brand + Prompt */}
       <div className="grid gap-6 lg:grid-cols-2">
-
         {/* Panel 1: Brand Profile + Articles */}
         <Card>
           <CardContent className="p-6 space-y-6">
@@ -427,19 +731,35 @@ export default function MarketingPage() {
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>Brand name</Label>
-                  <Input placeholder="Your brand" value={brandName} onChange={(e) => setBrandName(e.target.value)} />
+                  <Input
+                    placeholder="Your brand"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Category / Industry</Label>
-                  <Input placeholder="perfume, fashion, tech, skincare…" value={industry} onChange={(e) => setIndustry(e.target.value)} />
+                  <Input
+                    placeholder="perfume, fashion, tech, skincare…"
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Visual style</Label>
-                  <Input placeholder="minimalist luxury, dark cinematic…" value={visualStyle} onChange={(e) => setVisualStyle(e.target.value)} />
+                  <Input
+                    placeholder="minimalist luxury, dark cinematic…"
+                    value={visualStyle}
+                    onChange={(e) => setVisualStyle(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Audience</Label>
-                  <Input placeholder="Target audience" value={audience} onChange={(e) => setAudience(e.target.value)} />
+                  <Input
+                    placeholder="Target audience"
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                  />
                 </div>
               </div>
             </div>
@@ -469,15 +789,22 @@ export default function MarketingPage() {
                       />
                       <div>
                         <p className="text-sm font-semibold">{a.title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{a.summary}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {a.summary}
+                        </p>
                       </div>
                     </div>
                   </label>
                 ))}
               </div>
 
-              <form onSubmit={handleAddArticle} className="space-y-2 pt-3 border-t border-dashed">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Add custom angle</p>
+              <form
+                onSubmit={handleAddArticle}
+                className="space-y-2 pt-3 border-t border-dashed"
+              >
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Add custom angle
+                </p>
                 <Input
                   placeholder="Campaign title"
                   value={newTitle}
@@ -491,7 +818,12 @@ export default function MarketingPage() {
                   onChange={(e) => setNewSummary(e.target.value)}
                   required
                 />
-                <Button type="submit" variant="outline" size="sm" className="w-full">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                >
                   Add Angle
                 </Button>
               </form>
@@ -534,8 +866,12 @@ export default function MarketingPage() {
 
             {enhancedPrompt && (
               <div className="space-y-1.5 pt-2 border-t border-dashed">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Prompt sent to FLUX</p>
-                <p className="text-sm text-foreground leading-relaxed">{enhancedPrompt}</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Prompt sent to FLUX
+                </p>
+                <p className="text-sm text-foreground leading-relaxed">
+                  {enhancedPrompt}
+                </p>
               </div>
             )}
           </CardContent>
@@ -546,8 +882,13 @@ export default function MarketingPage() {
       <Card>
         <CardContent className="p-6">
           <div className="flex items-baseline justify-between gap-4 mb-6 flex-wrap">
-            <h2 className="font-semibold text-lg">4. Result &amp; Overlay Studio</h2>
-            <p className="text-xs text-muted-foreground">Labels render in HTML/CSS — always crisp, never burned into the image.</p>
+            <h2 className="font-semibold text-lg">
+              4. Result &amp; Overlay Studio
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Labels render in HTML/CSS — always crisp, never burned into the
+              image.
+            </p>
           </div>
 
           <div className="grid gap-8 lg:grid-cols-[1fr_1.3fr] items-start">
@@ -565,37 +906,70 @@ export default function MarketingPage() {
                     src={imageUrl}
                     alt="Generated campaign visual"
                     className="w-full h-full object-cover transition-all duration-300"
-                    style={{ filter: `blur(${cfg.bgBlur}px)`, display: imageLoaded ? "block" : "none" }}
+                    style={{
+                      filter: `blur(${cfg.bgBlur}px)`,
+                      display: imageLoaded ? "block" : "none",
+                    }}
                     onLoad={() => setImageLoaded(true)}
                   />
                 )}
                 {/* Overlay */}
                 <div style={overlayStyle}>
-                  <div style={{ fontWeight: 700, lineHeight: 1.15, color: cfg.textColor, textShadow: shadow }}>
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      lineHeight: 1.15,
+                      color: cfg.textColor,
+                      textShadow: shadow,
+                    }}
+                  >
                     {cfg.labelText || "Campaign Label"}
                   </div>
                   {cfg.showTagline && cfg.taglineText && (
-                    <div style={{ fontWeight: 500, fontSize: "0.68em", marginTop: 5, lineHeight: 1.35, color: cfg.taglineColor, textShadow: shadow }}>
+                    <div
+                      style={{
+                        fontWeight: 500,
+                        fontSize: "0.68em",
+                        marginTop: 5,
+                        lineHeight: 1.35,
+                        color: cfg.taglineColor,
+                        textShadow: shadow,
+                      }}
+                    >
                       {cfg.taglineText}
                     </div>
                   )}
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">Tip: use Image blur for a soft focus editorial look.</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Tip: use Image blur for a soft focus editorial look.
+              </p>
             </div>
 
             {/* Studio controls */}
             <div className="space-y-5">
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Text Content</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  Text Content
+                </p>
                 <div className="space-y-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Main headline</Label>
-                    <Input value={cfg.labelText} onChange={(e) => updateCfg({ labelText: e.target.value })} placeholder="Main text" />
+                    <Input
+                      value={cfg.labelText}
+                      onChange={(e) => updateCfg({ labelText: e.target.value })}
+                      placeholder="Main text"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Tagline / sub-copy</Label>
-                    <Input value={cfg.taglineText} onChange={(e) => updateCfg({ taglineText: e.target.value })} placeholder="Optional tagline" />
+                    <Input
+                      value={cfg.taglineText}
+                      onChange={(e) =>
+                        updateCfg({ taglineText: e.target.value })
+                      }
+                      placeholder="Optional tagline"
+                    />
                   </div>
                 </div>
               </div>
@@ -603,12 +977,19 @@ export default function MarketingPage() {
               <Separator />
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Style Preset &amp; Layout</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  Style Preset &amp; Layout
+                </p>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Preset</Label>
-                    <Select value={cfg.style} onValueChange={(v) => applyPreset(v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select
+                      value={cfg.style}
+                      onValueChange={(v) => applyPreset(v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="luxury">Luxury Dark</SelectItem>
                         <SelectItem value="minimal">Minimal Clean</SelectItem>
@@ -621,23 +1002,37 @@ export default function MarketingPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Position</Label>
-                    <Select value={cfg.position} onValueChange={(v) => updateCfg({ position: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select
+                      value={cfg.position}
+                      onValueChange={(v) => updateCfg({ position: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="center">Center</SelectItem>
                         <SelectItem value="top-center">Top Center</SelectItem>
-                        <SelectItem value="bottom-center">Bottom Center</SelectItem>
+                        <SelectItem value="bottom-center">
+                          Bottom Center
+                        </SelectItem>
                         <SelectItem value="top-left">Top Left</SelectItem>
                         <SelectItem value="top-right">Top Right</SelectItem>
                         <SelectItem value="bottom-left">Bottom Left</SelectItem>
-                        <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                        <SelectItem value="bottom-right">
+                          Bottom Right
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Text align</Label>
-                    <Select value={cfg.textAlign} onValueChange={(v) => updateCfg({ textAlign: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select
+                      value={cfg.textAlign}
+                      onValueChange={(v) => updateCfg({ textAlign: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="center">Center</SelectItem>
                         <SelectItem value="left">Left</SelectItem>
@@ -651,69 +1046,168 @@ export default function MarketingPage() {
               <Separator />
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Colors</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  Colors
+                </p>
                 <div className="grid grid-cols-2 gap-2">
-                  <ColorRow label="Headline" value={cfg.textColor} onChange={(v) => updateCfg({ textColor: v })} />
-                  <ColorRow label="Tagline" value={cfg.taglineColor} onChange={(v) => updateCfg({ taglineColor: v })} />
-                  <ColorRow label="Background" value={cfg.bgColor} onChange={(v) => updateCfg({ bgColor: v })} />
-                  <ColorRow label="Border" value={cfg.borderColor} onChange={(v) => updateCfg({ borderColor: v })} />
+                  <ColorRow
+                    label="Headline"
+                    value={cfg.textColor}
+                    onChange={(v) => updateCfg({ textColor: v })}
+                  />
+                  <ColorRow
+                    label="Tagline"
+                    value={cfg.taglineColor}
+                    onChange={(v) => updateCfg({ taglineColor: v })}
+                  />
+                  <ColorRow
+                    label="Background"
+                    value={cfg.bgColor}
+                    onChange={(v) => updateCfg({ bgColor: v })}
+                  />
+                  <ColorRow
+                    label="Border"
+                    value={cfg.borderColor}
+                    onChange={(v) => updateCfg({ borderColor: v })}
+                  />
                 </div>
               </div>
 
               <Separator />
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Typography &amp; Sizing</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  Typography &amp; Sizing
+                </p>
                 <div className="space-y-3">
-                  <SliderRow label="Font size" value={cfg.fontSize} min={10} max={48} onChange={(v) => updateCfg({ fontSize: v })} />
-                  <SliderRow label="Letter spacing" value={cfg.letterSpacing} min={0} max={20} onChange={(v) => updateCfg({ letterSpacing: v })} />
-                  <SliderRow label="Padding" value={cfg.padding} min={4} max={48} onChange={(v) => updateCfg({ padding: v })} />
+                  <SliderRow
+                    label="Font size"
+                    value={cfg.fontSize}
+                    min={10}
+                    max={48}
+                    onChange={(v) => updateCfg({ fontSize: v })}
+                  />
+                  <SliderRow
+                    label="Letter spacing"
+                    value={cfg.letterSpacing}
+                    min={0}
+                    max={20}
+                    onChange={(v) => updateCfg({ letterSpacing: v })}
+                  />
+                  <SliderRow
+                    label="Padding"
+                    value={cfg.padding}
+                    min={4}
+                    max={48}
+                    onChange={(v) => updateCfg({ padding: v })}
+                  />
                 </div>
               </div>
 
               <Separator />
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Background &amp; Overlay</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  Background &amp; Overlay
+                </p>
                 <div className="space-y-3">
-                  <SliderRow label="Overlay opacity" value={cfg.opacity} min={0} max={100} unit="%" onChange={(v) => updateCfg({ opacity: v })} />
-                  <SliderRow label="Overlay blur" value={cfg.overlayBlur} min={0} max={30} onChange={(v) => updateCfg({ overlayBlur: v })} />
-                  <SliderRow label="Image blur" value={cfg.bgBlur} min={0} max={20} onChange={(v) => updateCfg({ bgBlur: v })} />
+                  <SliderRow
+                    label="Overlay opacity"
+                    value={cfg.opacity}
+                    min={0}
+                    max={100}
+                    unit="%"
+                    onChange={(v) => updateCfg({ opacity: v })}
+                  />
+                  <SliderRow
+                    label="Overlay blur"
+                    value={cfg.overlayBlur}
+                    min={0}
+                    max={30}
+                    onChange={(v) => updateCfg({ overlayBlur: v })}
+                  />
+                  <SliderRow
+                    label="Image blur"
+                    value={cfg.bgBlur}
+                    min={0}
+                    max={20}
+                    onChange={(v) => updateCfg({ bgBlur: v })}
+                  />
                 </div>
               </div>
 
               <Separator />
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Border &amp; Shape</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  Border &amp; Shape
+                </p>
                 <div className="space-y-3">
-                  <SliderRow label="Border width" value={cfg.borderWidth} min={0} max={8} onChange={(v) => updateCfg({ borderWidth: v })} />
-                  <SliderRow label="Border radius" value={cfg.borderRadius} min={0} max={40} onChange={(v) => updateCfg({ borderRadius: v })} />
+                  <SliderRow
+                    label="Border width"
+                    value={cfg.borderWidth}
+                    min={0}
+                    max={8}
+                    onChange={(v) => updateCfg({ borderWidth: v })}
+                  />
+                  <SliderRow
+                    label="Border radius"
+                    value={cfg.borderRadius}
+                    min={0}
+                    max={40}
+                    onChange={(v) => updateCfg({ borderRadius: v })}
+                  />
                 </div>
               </div>
 
               <Separator />
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Options</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  Options
+                </p>
                 <div className="flex flex-wrap gap-3">
                   {[
-                    { id: "showOverlay", label: "Show overlay", key: "showOverlay" as keyof OverlayConfig },
-                    { id: "showTagline", label: "Show tagline", key: "showTagline" as keyof OverlayConfig },
-                    { id: "uppercase", label: "Uppercase", key: "uppercase" as keyof OverlayConfig },
-                    { id: "showBorder", label: "Show border", key: "showBorder" as keyof OverlayConfig },
-                    { id: "textShadow", label: "Text shadow", key: "textShadow" as keyof OverlayConfig },
+                    {
+                      id: "showOverlay",
+                      label: "Show overlay",
+                      key: "showOverlay" as keyof OverlayConfig,
+                    },
+                    {
+                      id: "showTagline",
+                      label: "Show tagline",
+                      key: "showTagline" as keyof OverlayConfig,
+                    },
+                    {
+                      id: "uppercase",
+                      label: "Uppercase",
+                      key: "uppercase" as keyof OverlayConfig,
+                    },
+                    {
+                      id: "showBorder",
+                      label: "Show border",
+                      key: "showBorder" as keyof OverlayConfig,
+                    },
+                    {
+                      id: "textShadow",
+                      label: "Text shadow",
+                      key: "textShadow" as keyof OverlayConfig,
+                    },
                   ].map(({ id, label, key }) => (
                     <label
                       key={id}
                       className={`flex items-center gap-2 border rounded-full px-3 py-1.5 cursor-pointer text-xs font-semibold transition-colors ${
-                        cfg[key] ? "border-primary bg-primary/10 text-primary" : "border-border"
+                        cfg[key]
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border"
                       }`}
                     >
                       <Checkbox
                         id={id}
                         checked={!!cfg[key]}
-                        onCheckedChange={(checked) => updateCfg({ [key]: !!checked })}
+                        onCheckedChange={(checked) =>
+                          updateCfg({ [key]: !!checked })
+                        }
                         className="h-3.5 w-3.5"
                       />
                       {label}
@@ -727,15 +1221,21 @@ export default function MarketingPage() {
           {/* Caption Studio */}
           <div className="mt-8 pt-6 border-t border-dashed space-y-4">
             <div className="flex items-baseline justify-between gap-4 flex-wrap">
-              <h2 className="font-semibold text-lg">5. Social Media Captions</h2>
-              <p className="text-xs text-muted-foreground">AI-written captions with tone variants, ready to copy.</p>
+              <h2 className="font-semibold text-lg">
+                5. Social Media Captions
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                AI-written captions with tone variants, ready to copy.
+              </p>
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
               <div className="space-y-1">
                 <Label className="text-xs">Tone</Label>
                 <Select value={captionTone} onValueChange={setCaptionTone}>
-                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All three tones</SelectItem>
                     <SelectItem value="professional">Professional</SelectItem>
@@ -746,8 +1246,13 @@ export default function MarketingPage() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Platform</Label>
-                <Select value={captionPlatform} onValueChange={setCaptionPlatform}>
-                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                <Select
+                  value={captionPlatform}
+                  onValueChange={setCaptionPlatform}
+                >
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="instagram">Instagram</SelectItem>
                     <SelectItem value="linkedin">LinkedIn</SelectItem>
@@ -774,16 +1279,27 @@ export default function MarketingPage() {
             {captions.length > 0 && (
               <div className="grid gap-3">
                 {captions.map((c, i) => (
-                  <div key={i} className="border border-border rounded-xl p-4 space-y-2 bg-muted/20">
+                  <div
+                    key={i}
+                    className="border border-border rounded-xl p-4 space-y-2 bg-muted/20"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground bg-muted px-2.5 py-0.5 rounded-full">
                         {c.tone}
                       </span>
-                      <CopyButton text={c.caption + (c.hashtags ? "\n\n" + c.hashtags : "")} />
+                      <CopyButton
+                        text={
+                          c.caption + (c.hashtags ? "\n\n" + c.hashtags : "")
+                        }
+                      />
                     </div>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{c.caption}</p>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                      {c.caption}
+                    </p>
                     {c.hashtags && (
-                      <p className="text-xs font-semibold text-primary leading-relaxed">{c.hashtags}</p>
+                      <p className="text-xs font-semibold text-primary leading-relaxed">
+                        {c.hashtags}
+                      </p>
                     )}
                   </div>
                 ))}
@@ -791,8 +1307,65 @@ export default function MarketingPage() {
             )}
 
             {captions.length === 0 && !captionError && !isGeneratingCaption && (
-              <p className="text-sm text-muted-foreground">Generate an image first, then create captions here.</p>
+              <p className="text-sm text-muted-foreground">
+                Generate an image first, then create captions here.
+              </p>
             )}
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-dashed space-y-4">
+            <div className="flex items-baseline justify-between gap-4 flex-wrap">
+              <h2 className="font-semibold text-lg">6. Send Campaign Email</h2>
+              <p className="text-xs text-muted-foreground">
+                Send your generated creative directly from the app.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Recipient emails</Label>
+              <Textarea
+                rows={3}
+                placeholder="customer1@example.com, customer2@example.com"
+                value={emailRecipients}
+                onChange={(e) => setEmailRecipients(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Separate multiple emails by comma, semicolon, or new line.
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              <div className="space-y-1.5">
+                <Label>Email subject</Label>
+                <Input
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="A new signature scent moment"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Campaign copy</Label>
+                <Textarea
+                  rows={6}
+                  value={campaignCopy}
+                  onChange={(e) => setCampaignCopy(e.target.value)}
+                  placeholder="Write the campaign copy that will appear in your luxury email."
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                Image source: {imageUrl ? "Ready" : "Generate image first"}
+              </p>
+              <Button
+                onClick={handleSendCampaignEmail}
+                disabled={isSendingEmail || !imageUrl}
+              >
+                {isSendingEmail ? "Sending…" : "Send HTML Email"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

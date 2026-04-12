@@ -1,29 +1,43 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
-import { BarChart3, Home, Megaphone, Package, Settings, Activity, Mail, Lightbulb } from "lucide-react"
-import { cn } from "@/lib/utils"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import {
+  BarChart3,
+  Home,
+  Megaphone,
+  Package,
+  Settings,
+  Activity,
+  Mail,
+  Lightbulb,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Toaster } from "@/components/ui/toaster";
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: Home },
   { name: "Products", href: "/dashboard/products", icon: Package },
   { name: "Marketing AI", href: "/dashboard/marketing", icon: Megaphone },
-  { name: "Product Intel", href: "/dashboard/recommendations", icon: Lightbulb },
+  {
+    name: "Product Intel",
+    href: "/dashboard/recommendations",
+    icon: Lightbulb,
+  },
   { name: "Email Campaigns", href: "/dashboard/email-campaigns", icon: Mail },
   { name: "User Tracking", href: "/dashboard/tracking", icon: Activity },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
-]
+];
 
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const pathname = usePathname()
-  const [storeName, setStoreName] = useState("SmartSouk")
+  const pathname = usePathname();
+  const [storeName, setStoreName] = useState("SmartSouk");
 
   useEffect(() => {
     const loadStoreName = async () => {
@@ -32,27 +46,27 @@ export default function DashboardLayout({
           method: "GET",
           headers: { "Content-Type": "application/json" },
           cache: "no-store",
-        })
+        });
 
         if (!response.ok) {
-          return
+          return;
         }
 
         const body = (await response.json()) as {
-          settings?: { store_name?: string }
-        }
+          settings?: { store_name?: string };
+        };
 
-        const nextStoreName = body.settings?.store_name?.trim()
+        const nextStoreName = body.settings?.store_name?.trim();
         if (nextStoreName) {
-          setStoreName(nextStoreName)
+          setStoreName(nextStoreName);
         }
       } catch {
         // Keep fallback store name if settings endpoint is unavailable.
       }
-    }
+    };
 
-    void loadStoreName()
-  }, [])
+    void loadStoreName();
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -72,7 +86,7 @@ export default function DashboardLayout({
           {/* Navigation */}
           <nav className="flex-1 space-y-1 p-4">
             {navigation.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = pathname === item.href;
               return (
                 <Link
                   key={item.name}
@@ -81,13 +95,13 @@ export default function DashboardLayout({
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
                   <item.icon className="h-5 w-5" />
                   {item.name}
                 </Link>
-              )
+              );
             })}
           </nav>
 
@@ -108,6 +122,8 @@ export default function DashboardLayout({
       <main className="ml-64 flex-1">
         <div className="p-8">{children}</div>
       </main>
+
+      <Toaster />
     </div>
-  )
+  );
 }
