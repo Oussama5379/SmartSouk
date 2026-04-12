@@ -1,4 +1,4 @@
-import type { Order, Session } from "@/lib/mock-data"
+import type { Order, Session } from "@/lib/store-types"
 
 export const TRACK_EVENT_TYPES = [
   "session_start",

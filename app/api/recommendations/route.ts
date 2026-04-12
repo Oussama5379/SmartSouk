@@ -1,7 +1,5 @@
-import { generateText, Output } from "ai"
-import { products } from "@/lib/mock-data"
+import { listStoreProducts } from "@/lib/store-data"
 import { getTrackingDashboardData, isTrackingConfigured } from "@/lib/tracking-store"
-import { z } from "zod"
 import type {
   DailyPerformanceSnapshot,
   InventoryAlert,
@@ -13,40 +11,9 @@ import type {
   TrafficSourceSnapshot,
   TrackedProductEvent,
 } from "@/lib/tracking-types"
+import type { Session, StoreProduct } from "@/lib/store-types"
 
 const WEEKLY_DAYS = 7
-
-const aiRecommendationsSchema = z.object({
-  insightSummary: z.string().min(1),
-  recommendations: z
-    .array(
-      z.object({
-        type: z.enum(["upsell", "cross_sell", "at_risk", "top_performer"]),
-        product_id: z.string().min(1),
-        reason: z.string().min(1),
-        confidence: z.number().min(0).max(100),
-        potential_revenue: z.number(),
-      })
-    )
-    .min(1)
-    .max(8),
-  customerSegments: z
-    .array(
-      z.object({
-        name: z.string().min(1),
-        summary: z.string().min(1),
-        indicators: z.array(z.string().min(1)).min(1).max(5),
-      })
-    )
-    .max(6),
-  actionItems: z.array(z.string().min(1)).min(1).max(6),
-})
-
-function isInventoryRiskProduct(product: (typeof products)[number]): product is (typeof products)[number] & {
-  stock_status: "low_stock" | "out_of_stock"
-} {
-  return product.stock_status === "low_stock" || product.stock_status === "out_of_stock"
-}
 
 function round(value: number, precision = 1): number {
   const factor = 10 ** precision
@@ -103,12 +70,11 @@ function buildDailyPerformance(
 }
 
 function buildTopProducts(
+  products: StoreProduct[],
   events: TrackedProductEvent[],
   orders: Array<{ product_id: string; quantity: number; price_paid: number }>
 ): ProductPerformanceSnapshot[] {
-  const productMap = new Map(
-    products.map((product) => [product.id, { id: product.id, name: product.name }])
-  )
+  const productNameById = new Map(products.map((product) => [product.id, product.name]))
 
   const metricsByProduct = new Map<
     string,
@@ -123,11 +89,11 @@ function buildTopProducts(
     }
   >()
 
-  const ensureProductMetrics = (productId: string) => {
+  const ensureMetrics = (productId: string) => {
     if (!metricsByProduct.has(productId)) {
       metricsByProduct.set(productId, {
         product_id: productId,
-        product_name: productMap.get(productId)?.name ?? "Unknown Product",
+        product_name: productNameById.get(productId) ?? "Unknown Product",
         views: 0,
         clicks: 0,
         add_to_cart: 0,
@@ -144,7 +110,8 @@ function buildTopProducts(
       continue
     }
 
-    const row = ensureProductMetrics(event.product_id)
+    const row = ensureMetrics(event.product_id)
+
     if (event.event_type === "product_view") {
       row.views += 1
     } else if (event.event_type === "click") {
@@ -155,7 +122,7 @@ function buildTopProducts(
   }
 
   for (const order of orders) {
-    const row = ensureProductMetrics(order.product_id)
+    const row = ensureMetrics(order.product_id)
     row.orders += Math.max(1, order.quantity)
     row.revenue += Math.max(0, order.price_paid)
   }
@@ -166,16 +133,16 @@ function buildTopProducts(
       conversion_rate: row.views > 0 ? round((row.orders / row.views) * 100) : 0,
       revenue: round(row.revenue, 2),
     }))
-    .sort((a, b) => {
-      if (b.revenue !== a.revenue) {
-        return b.revenue - a.revenue
+    .sort((left, right) => {
+      if (right.revenue !== left.revenue) {
+        return right.revenue - left.revenue
       }
 
-      if (b.orders !== a.orders) {
-        return b.orders - a.orders
+      if (right.orders !== left.orders) {
+        return right.orders - left.orders
       }
 
-      return b.views - a.views
+      return right.views - left.views
     })
 }
 
@@ -217,13 +184,11 @@ function buildTopPages(
       hits,
       share: round((hits / totalHits) * 100),
     }))
-    .sort((a, b) => b.hits - a.hits)
+    .sort((left, right) => right.hits - left.hits)
     .slice(0, 6)
 }
 
-function buildTrafficSources(
-  sessions: Array<{ utm_source?: string; utm_medium?: string }>
-): TrafficSourceSnapshot[] {
+function buildTrafficSources(sessions: Session[]): TrafficSourceSnapshot[] {
   if (sessions.length === 0) {
     return []
   }
@@ -243,15 +208,18 @@ function buildTrafficSources(
       sessions: count,
       share: round((count / sessions.length) * 100),
     }))
-    .sort((a, b) => b.sessions - a.sessions)
+    .sort((left, right) => right.sessions - left.sessions)
     .slice(0, 6)
 }
 
-function buildInventoryAlerts(topProducts: ProductPerformanceSnapshot[]): InventoryAlert[] {
+function buildInventoryAlerts(
+  products: StoreProduct[],
+  topProducts: ProductPerformanceSnapshot[]
+): InventoryAlert[] {
   const topProductMap = new Map(topProducts.map((product) => [product.product_id, product]))
 
   return products
-    .filter(isInventoryRiskProduct)
+    .filter((product) => product.stock_status === "low_stock" || product.stock_status === "out_of_stock")
     .map((product) => {
       const signals = topProductMap.get(product.id)
       const demandSignals = (signals?.views ?? 0) + (signals?.add_to_cart ?? 0) + (signals?.orders ?? 0) * 2
@@ -271,150 +239,67 @@ function buildInventoryAlerts(topProducts: ProductPerformanceSnapshot[]): Invent
       }
     })
     .filter((alert) => alert.demand_signals > 0)
-    .sort((a, b) => b.estimated_revenue_at_risk - a.estimated_revenue_at_risk)
+    .sort((left, right) => right.estimated_revenue_at_risk - left.estimated_revenue_at_risk)
 }
 
 function buildCrossSellRecommendations(
-  orders: Array<{ session_id: string; product_id: string }>
+  orders: Array<{ session_id: string; product_id: string }>,
+  products: StoreProduct[]
 ): RecommendationItem[] {
   const productNameById = new Map(products.map((product) => [product.id, product.name]))
   const priceById = new Map(products.map((product) => [product.id, product.price_tnd]))
-
   const orderedProductsBySession = new Map<string, Set<string>>()
+
   for (const order of orders) {
     const sessionProducts = orderedProductsBySession.get(order.session_id) ?? new Set<string>()
     sessionProducts.add(order.product_id)
     orderedProductsBySession.set(order.session_id, sessionProducts)
   }
 
-  const baskets = Array.from(orderedProductsBySession.values()).filter(
-    (productsInBasket) => productsInBasket.size > 1
-  )
-  if (baskets.length === 0) {
-    return []
-  }
-
-  const baseCounts = new Map<string, number>()
   const pairCounts = new Map<string, number>()
+  const baseCounts = new Map<string, number>()
 
-  for (const basket of baskets) {
-    const items = Array.from(basket)
-    for (const baseProductId of items) {
-      baseCounts.set(baseProductId, (baseCounts.get(baseProductId) ?? 0) + 1)
-      for (const pairedProductId of items) {
-        if (baseProductId === pairedProductId) {
+  for (const sessionProducts of orderedProductsBySession.values()) {
+    const items = Array.from(sessionProducts)
+    if (items.length < 2) {
+      continue
+    }
+
+    for (const base of items) {
+      baseCounts.set(base, (baseCounts.get(base) ?? 0) + 1)
+
+      for (const paired of items) {
+        if (paired === base) {
           continue
         }
-
-        const pairKey = `${baseProductId}|${pairedProductId}`
-        pairCounts.set(pairKey, (pairCounts.get(pairKey) ?? 0) + 1)
+        const key = `${base}|${paired}`
+        pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1)
       }
     }
   }
 
-  const candidates = Array.from(pairCounts.entries())
-    .map(([pairKey, pairSessions]) => {
-      const [baseProductId, pairedProductId] = pairKey.split("|")
-      const baseSessions = baseCounts.get(baseProductId) ?? 0
+  return Array.from(pairCounts.entries())
+    .map(([key, pairSessions]) => {
+      const [baseId, pairedId] = key.split("|")
+      const baseSessions = baseCounts.get(baseId) ?? 0
       if (baseSessions === 0) {
         return null
       }
 
       const confidence = round((pairSessions / baseSessions) * 100)
-      const support = round((pairSessions / baskets.length) * 100)
+      const support = round((pairSessions / Math.max(1, orderedProductsBySession.size)) * 100)
+
       return {
-        baseProductId,
-        pairedProductId,
-        pairSessions,
-        baseSessions,
+        type: "cross_sell" as const,
+        product_id: pairedId,
+        reason: `${productNameById.get(pairedId) ?? "Companion product"} appears with ${productNameById.get(baseId) ?? "base product"} in ${pairSessions} shared carts (${confidence}% confidence, ${support}% support).`,
         confidence,
-        support,
+        potential_revenue: round((priceById.get(pairedId) ?? 0) * pairSessions, 2),
       }
     })
-    .filter((candidate): candidate is NonNullable<typeof candidate> => {
-      if (!candidate) {
-        return false
-      }
-
-      return candidate.pairSessions >= 1 && candidate.baseSessions >= 1
-    })
-    .sort((a, b) => {
-      if (b.confidence !== a.confidence) {
-        return b.confidence - a.confidence
-      }
-      if (b.support !== a.support) {
-        return b.support - a.support
-      }
-      return b.pairSessions - a.pairSessions
-    })
-
-  return candidates.slice(0, 2).map((candidate) => {
-    const baseName = productNameById.get(candidate.baseProductId) ?? "this product"
-    const pairedName = productNameById.get(candidate.pairedProductId) ?? "this companion product"
-    const price = priceById.get(candidate.pairedProductId) ?? 0
-
-    return {
-      type: "cross_sell",
-      product_id: candidate.pairedProductId,
-      reason: `${pairedName} appears with ${baseName} in ${candidate.pairSessions} of ${candidate.baseSessions} shared baskets (${candidate.confidence}% confidence, ${candidate.support}% support).`,
-      confidence: candidate.confidence,
-      potential_revenue: round(price * candidate.pairSessions, 2),
-    }
-  })
-}
-
-function buildUpsellRecommendation(
-  topProducts: ProductPerformanceSnapshot[],
-  totalRevenue: number,
-  totalOrders: number
-): RecommendationItem | null {
-  if (topProducts.length === 0 || totalOrders === 0) {
-    return null
-  }
-
-  const overallAov = totalRevenue / totalOrders
-  let bestCandidate: ProductPerformanceSnapshot | null = null
-  let bestScore = -1
-
-  for (const product of topProducts) {
-    if (product.orders <= 0 || product.revenue <= 0) {
-      continue
-    }
-
-    const productAov = product.revenue / product.orders
-    if (productAov <= overallAov) {
-      continue
-    }
-
-    const cartToOrderRatio = product.add_to_cart > 0 ? product.orders / product.add_to_cart : 1
-    const premiumDelta = productAov - overallAov
-    const score = premiumDelta * Math.max(cartToOrderRatio, 0.25) * product.orders
-
-    if (score > bestScore) {
-      bestScore = score
-      bestCandidate = product
-    }
-  }
-
-  if (!bestCandidate) {
-    return null
-  }
-
-  const bestAov = bestCandidate.revenue / bestCandidate.orders
-  const cartToOrderRatio = bestCandidate.add_to_cart > 0 ? bestCandidate.orders / bestCandidate.add_to_cart : 1
-  const confidence = Math.min(
-    99,
-    round(Math.min(1, cartToOrderRatio) * 70 + Math.min(29, (bestAov / Math.max(overallAov, 1)) * 20))
-  )
-  const potentialRevenue = round((bestAov - overallAov) * bestCandidate.orders, 2)
-
-  return {
-    type: "upsell",
-    product_id: bestCandidate.product_id,
-    reason: `${bestCandidate.product_name} has ${round(bestAov, 2)} TND average order value vs ${round(overallAov, 2)} TND store average, with ${round(cartToOrderRatio * 100)}% cart-to-order completion.`,
-    confidence,
-    potential_revenue: potentialRevenue,
-  }
+    .filter((item): item is RecommendationItem => Boolean(item))
+    .sort((left, right) => right.confidence - left.confidence)
+    .slice(0, 2)
 }
 
 function buildTopPerformerRecommendation(
@@ -431,13 +316,51 @@ function buildTopPerformerRecommendation(
   return {
     type: "top_performer",
     product_id: topProduct.product_id,
-    reason: `${topProduct.product_name} contributes ${revenueShare}% of total revenue with ${topProduct.orders} confirmed orders and ${topProduct.conversion_rate}% product conversion.`,
-    confidence: revenueShare,
+    reason: `${topProduct.product_name} contributes ${revenueShare}% of tracked revenue with ${topProduct.orders} confirmed orders.`,
+    confidence: Math.min(99, revenueShare),
     potential_revenue: round(topProduct.revenue, 2),
   }
 }
 
-function buildRfmSegments(
+function buildUpsellRecommendation(
+  topProducts: ProductPerformanceSnapshot[],
+  products: StoreProduct[],
+  totalRevenue: number,
+  totalOrders: number
+): RecommendationItem | null {
+  if (totalOrders <= 0 || topProducts.length === 0) {
+    return null
+  }
+
+  const avgOrderValue = totalRevenue / totalOrders
+  const productById = new Map(products.map((product) => [product.id, product]))
+
+  const candidate = topProducts.find((topProduct) => {
+    const product = productById.get(topProduct.product_id)
+    return Boolean(product && product.stock_status !== "out_of_stock" && product.price_tnd > avgOrderValue)
+  })
+
+  if (!candidate) {
+    return null
+  }
+
+  const product = productById.get(candidate.product_id)
+  if (!product) {
+    return null
+  }
+
+  const potentialRevenue = round((product.price_tnd - avgOrderValue) * Math.max(1, candidate.orders), 2)
+
+  return {
+    type: "upsell",
+    product_id: product.id,
+    reason: `${product.name} price (${product.price_tnd} TND) is above average order value (${round(avgOrderValue, 2)} TND) and already converts with intent traffic.`,
+    confidence: Math.min(98, round(55 + candidate.conversion_rate * 0.7)),
+    potential_revenue: Math.max(0, potentialRevenue),
+  }
+}
+
+function buildSegments(
   orders: Array<{ session_id: string; user_id?: string; price_paid: number; timestamp: number }>
 ): RecommendationSegment[] {
   if (orders.length === 0) {
@@ -454,8 +377,8 @@ function buildRfmSegments(
   >()
 
   for (const order of orders) {
-    const customerKey = order.user_id?.trim() || order.session_id
-    const existing = customerMap.get(customerKey) ?? {
+    const key = order.user_id?.trim() || order.session_id
+    const existing = customerMap.get(key) ?? {
       frequency: 0,
       monetary: 0,
       lastOrderTs: 0,
@@ -464,74 +387,74 @@ function buildRfmSegments(
     existing.frequency += 1
     existing.monetary += Math.max(0, order.price_paid)
     existing.lastOrderTs = Math.max(existing.lastOrderTs, order.timestamp)
-    customerMap.set(customerKey, existing)
+    customerMap.set(key, existing)
   }
 
   const customers = Array.from(customerMap.values())
-  const averageMonetary =
+  const avgMonetary =
     customers.reduce((sum, customer) => sum + customer.monetary, 0) / Math.max(1, customers.length)
   const now = Date.now()
 
-  const segments = new Map<
+  const buckets = new Map<
     string,
     {
       count: number
+      totalRecency: number
       totalFrequency: number
       totalMonetary: number
-      totalRecencyDays: number
     }
   >()
 
   for (const customer of customers) {
     const recencyDays = Math.max(0, (now - customer.lastOrderTs) / (1000 * 60 * 60 * 24))
-    let segmentName = "Occasional Buyers"
+    let label = "Occasional Buyers"
 
-    if (customer.frequency >= 3 && customer.monetary >= averageMonetary && recencyDays <= 30) {
-      segmentName = "Champions"
+    if (customer.frequency >= 3 && customer.monetary >= avgMonetary && recencyDays <= 30) {
+      label = "Champions"
     } else if (customer.frequency >= 2 && recencyDays <= 60) {
-      segmentName = "Loyal Customers"
+      label = "Loyal Customers"
     } else if (customer.frequency === 1 && recencyDays <= 30) {
-      segmentName = "New Customers"
+      label = "New Customers"
     } else if (customer.frequency >= 2 && recencyDays > 90) {
-      segmentName = "At Risk Customers"
+      label = "At Risk Customers"
     }
 
-    const bucket = segments.get(segmentName) ?? {
+    const bucket = buckets.get(label) ?? {
       count: 0,
+      totalRecency: 0,
       totalFrequency: 0,
       totalMonetary: 0,
-      totalRecencyDays: 0,
     }
 
     bucket.count += 1
+    bucket.totalRecency += recencyDays
     bucket.totalFrequency += customer.frequency
     bucket.totalMonetary += customer.monetary
-    bucket.totalRecencyDays += recencyDays
-    segments.set(segmentName, bucket)
+    buckets.set(label, bucket)
   }
 
-  return Array.from(segments.entries())
-    .sort((a, b) => b[1].count - a[1].count)
+  return Array.from(buckets.entries())
+    .sort((left, right) => right[1].count - left[1].count)
     .slice(0, 4)
-    .map(([name, stats]) => ({
+    .map(([name, bucket]) => ({
       name,
-      summary: `${stats.count} customer profiles in this segment.`,
+      summary: `${bucket.count} customers in this segment.`,
       indicators: [
-        `Recency: ${round(stats.totalRecencyDays / stats.count, 1)} days`,
-        `Frequency: ${round(stats.totalFrequency / stats.count, 1)} purchases`,
-        `Monetary: ${round(stats.totalMonetary / stats.count, 1)} TND average`,
+        `Recency: ${round(bucket.totalRecency / bucket.count, 1)} days`,
+        `Frequency: ${round(bucket.totalFrequency / bucket.count, 1)} purchases`,
+        `Monetary: ${round(bucket.totalMonetary / bucket.count, 1)} TND average`,
       ],
     }))
 }
 
 function buildActionItems(params: {
-  revenuePerVisitor: number
-  cartAbandonmentRate: number
-  cartsAbandoned: number
-  cartsStarted: number
   recommendations: RecommendationItem[]
   inventoryAlerts: InventoryAlert[]
   trafficSources: TrafficSourceSnapshot[]
+  cartAbandonmentRate: number
+  cartsAbandoned: number
+  cartsStarted: number
+  revenuePerVisitor: number
 }): string[] {
   const actions: string[] = []
 
@@ -543,275 +466,131 @@ function buildActionItems(params: {
 
   const crossSell = params.recommendations.find((recommendation) => recommendation.type === "cross_sell")
   if (crossSell) {
-    const productName =
-      products.find((product) => product.id === crossSell.product_id)?.name ?? "recommended companion"
-    actions.push(`Launch a bundle placement test for ${productName} on related product pages.`)
+    actions.push(`Deploy a cross-sell bundle for product ${crossSell.product_id} on related product pages.`)
   }
 
   const upsell = params.recommendations.find((recommendation) => recommendation.type === "upsell")
   if (upsell) {
-    const productName = products.find((product) => product.id === upsell.product_id)?.name ?? "premium product"
-    actions.push(`Use a post-add-to-cart upsell module to promote ${productName} to higher-intent buyers.`)
+    actions.push(`Run an upsell offer test for product ${upsell.product_id} post add-to-cart.`)
   }
 
-  const inventoryAlert = params.inventoryAlerts.find((alert) => alert.stock_status === "out_of_stock")
-  if (inventoryAlert) {
-    const productName =
-      products.find((product) => product.id === inventoryAlert.product_id)?.name ?? "out-of-stock item"
+  const topRisk = params.inventoryAlerts[0]
+  if (topRisk) {
     actions.push(
-      `Restock ${productName} first to prevent ${inventoryAlert.estimated_revenue_at_risk} TND additional revenue risk.`
+      `Prioritize stock fix for ${topRisk.product_id}; current demand puts ${topRisk.estimated_revenue_at_risk} TND at risk.`
     )
   }
 
   const topSource = params.trafficSources[0]
   if (topSource && topSource.source !== "Direct") {
-    actions.push(
-      `Scale ${topSource.source} traffic quality: it currently drives ${topSource.share}% of tracked sessions.`
-    )
+    actions.push(`Scale ${topSource.source} campaigns, currently contributing ${topSource.share}% of sessions.`)
   }
 
-  if (params.revenuePerVisitor > 0) {
-    actions.push(
-      `Set a weekly target to lift revenue per visitor above ${params.revenuePerVisitor} TND through bundle and upsell experiments.`
-    )
-  }
+  actions.push(
+    `Target weekly revenue-per-visitor above ${params.revenuePerVisitor} TND using bundles and upsell experiments.`
+  )
 
   return Array.from(new Set(actions)).slice(0, 6)
 }
 
 function buildInsightSummary(params: {
-  revenuePerVisitor: number
-  cartAbandonmentRate: number
-  trafficSources: TrafficSourceSnapshot[]
   recommendations: RecommendationItem[]
   inventoryAlerts: InventoryAlert[]
+  trafficSources: TrafficSourceSnapshot[]
+  revenuePerVisitor: number
+  cartAbandonmentRate: number
 }): string {
   const topSource = params.trafficSources[0]
-  const topPerformer = params.recommendations.find((recommendation) => recommendation.type === "top_performer")
-  const inventoryRisk = params.inventoryAlerts[0]
+  const performer = params.recommendations.find((item) => item.type === "top_performer")
+  const risk = params.inventoryAlerts[0]
 
-  const sourceSummary = topSource
-    ? `${topSource.source} contributes ${topSource.share}% of tracked sessions.`
-    : "Traffic source attribution is waiting on session data."
-  const performerSummary = topPerformer
-    ? `Top performer confidence is ${topPerformer.confidence}% based on observed order revenue share.`
-    : "No revenue leader detected yet."
-  const inventorySummary = inventoryRisk
-    ? `${products.find((product) => product.id === inventoryRisk.product_id)?.name ?? "One item"} currently carries ${inventoryRisk.estimated_revenue_at_risk} TND in stock-out risk.`
-    : "No inventory risks are active."
-
-  return `Revenue per visitor is ${params.revenuePerVisitor} TND with cart abandonment at ${params.cartAbandonmentRate}%. ${sourceSummary} ${performerSummary} ${inventorySummary}`
-}
-
-async function buildAiRecommendations(params: {
-  stats: RecommendationsApiResponse["stats"]
-  salesData: RecommendationsApiResponse["salesData"]
-  customerBehavior: RecommendationsApiResponse["customerBehavior"]
-  inventoryAlerts: InventoryAlert[]
-  fallbackRecommendations: RecommendationItem[]
-  fallbackCustomerSegments: RecommendationSegment[]
-  fallbackActionItems: string[]
-  fallbackInsightSummary: string
-}) {
-  const prompt = `You are a senior e-commerce growth analyst.
-
-Analyze this real tracking dataset and return practical, data-backed recommendations.
-
-Tracking stats:
-${JSON.stringify(params.stats)}
-
-Sales data:
-${JSON.stringify(params.salesData)}
-
-Customer behavior:
-${JSON.stringify(params.customerBehavior)}
-
-Inventory alerts:
-${JSON.stringify(params.inventoryAlerts)}
-
-Deterministic baseline (reference only):
-${JSON.stringify({
-    recommendations: params.fallbackRecommendations,
-    customerSegments: params.fallbackCustomerSegments,
-    actionItems: params.fallbackActionItems,
-    insightSummary: params.fallbackInsightSummary,
-  })}
-
-Product catalog:
-${JSON.stringify(
-    products.map((product) => ({
-      id: product.id,
-      name: product.name,
-      category: product.category,
-      price_tnd: product.price_tnd,
-      stock_status: product.stock_status,
-    }))
-  )}
-
-Rules:
-- Use only product IDs from the product catalog.
-- Explain each recommendation with specific evidence.
-- Confidence must be between 0 and 100.
-- potential_revenue must be positive for opportunities and negative for risks.
-- Keep advice actionable and concise.`
-
-  const aiResult = await generateText({
-    model: "openai/gpt-4o-mini",
-    prompt,
-    temperature: 0.4,
-    output: Output.object({ schema: aiRecommendationsSchema }),
-  })
-
-  return aiResult.output
+  return `Revenue per visitor is ${params.revenuePerVisitor} TND with cart abandonment at ${params.cartAbandonmentRate}%. ${topSource ? `${topSource.source} drives ${topSource.share}% of tracked sessions.` : "Source attribution is limited."} ${performer ? `Top performer confidence is ${performer.confidence}%.` : "No dominant top performer yet."} ${risk ? `Highest inventory risk is ${risk.product_id} with ${risk.estimated_revenue_at_risk} TND at risk.` : "No active inventory risk from current demand signals."}`
 }
 
 async function buildRecommendationsResponse(): Promise<RecommendationsApiResponse> {
+  const products = await listStoreProducts()
   const trackingData = await getTrackingDashboardData({
     sessionLimit: 5000,
     eventLimit: 20000,
     orderLimit: 20000,
   })
+
   const { stats, sessions, events, orders } = trackingData
-
-  const dailyPerformance = buildDailyPerformance(sessions, orders)
-  const topProducts = buildTopProducts(events, orders)
-  const topPages = buildTopPages(events, sessions)
+  const topProducts = buildTopProducts(products, events, orders)
   const trafficSources = buildTrafficSources(sessions)
-  const inventoryAlerts = buildInventoryAlerts(topProducts)
-  const guestSessions = sessions.filter((session) => session.user_type === "guest").length
-  const customerSessions = sessions.filter((session) => session.user_type === "customer").length
-  const conversionRate = stats.totalSessions > 0 ? round((stats.totalOrders / stats.totalSessions) * 100) : 0
-
-  const salesData = {
-    totals: {
-      sessions: stats.totalSessions,
-      events: stats.totalEvents,
-      orders: stats.totalOrders,
-      revenue: stats.totalRevenue,
-      conversionRate,
-      revenuePerVisitor: stats.revenuePerVisitor,
-      cartAbandonmentRate: stats.cartAbandonmentRate,
-    },
-    dailyPerformance,
-    topProducts: topProducts.slice(0, 10),
-  }
-
-  const customerBehavior = {
-    topPages,
-    trafficSources,
-    guestSessions,
-    customerSessions,
-    avgSessionDurationSeconds: stats.avgSessionDuration,
-  }
-
-  const emptyResponse: RecommendationsApiResponse = {
-    generated: false,
-    generatedAt: new Date().toISOString(),
-    stats,
-    salesData,
-    customerBehavior,
-    insightSummary:
-      "Not enough behavior and order data yet. Track a few sessions and confirmed payments to generate recommendations.",
-    recommendations: [],
-    inventoryAlerts,
-    customerSegments: [],
-    actionItems: [],
-  }
-
-  if (stats.totalEvents === 0 && stats.totalOrders === 0) {
-    return emptyResponse
-  }
-
+  const inventoryAlerts = buildInventoryAlerts(products, topProducts)
   const recommendations: RecommendationItem[] = []
-  const crossSellRecommendations = buildCrossSellRecommendations(orders)
-  recommendations.push(...crossSellRecommendations)
 
-  const upsellRecommendation = buildUpsellRecommendation(topProducts, stats.totalRevenue, stats.totalOrders)
-  if (upsellRecommendation) {
-    recommendations.push(upsellRecommendation)
+  recommendations.push(...buildCrossSellRecommendations(orders, products))
+
+  const upsell = buildUpsellRecommendation(topProducts, products, stats.totalRevenue, stats.totalOrders)
+  if (upsell) {
+    recommendations.push(upsell)
   }
 
-  const topPerformerRecommendation = buildTopPerformerRecommendation(topProducts, stats.totalRevenue)
-  if (topPerformerRecommendation) {
-    recommendations.push(topPerformerRecommendation)
+  const topPerformer = buildTopPerformerRecommendation(topProducts, stats.totalRevenue)
+  if (topPerformer) {
+    recommendations.push(topPerformer)
   }
 
-  const topInventoryRisk = inventoryAlerts[0]
-  if (topInventoryRisk) {
+  if (inventoryAlerts[0]) {
     recommendations.push({
       type: "at_risk",
-      product_id: topInventoryRisk.product_id,
-      reason: topInventoryRisk.reason,
-      confidence: Math.min(99, round(55 + topInventoryRisk.demand_signals * 1.2)),
-      potential_revenue: -Math.abs(topInventoryRisk.estimated_revenue_at_risk),
+      product_id: inventoryAlerts[0].product_id,
+      reason: inventoryAlerts[0].reason,
+      confidence: Math.min(99, round(50 + inventoryAlerts[0].demand_signals * 1.5)),
+      potential_revenue: -Math.abs(inventoryAlerts[0].estimated_revenue_at_risk),
     })
   }
 
-  const customerSegments = buildRfmSegments(orders)
+  const customerSegments = buildSegments(orders)
   const actionItems = buildActionItems({
-    revenuePerVisitor: stats.revenuePerVisitor,
+    recommendations,
+    inventoryAlerts,
+    trafficSources,
     cartAbandonmentRate: stats.cartAbandonmentRate,
     cartsAbandoned: stats.cartsAbandoned,
     cartsStarted: stats.cartsStarted,
+    revenuePerVisitor: stats.revenuePerVisitor,
+  })
+
+  const insightSummary = buildInsightSummary({
     recommendations,
     inventoryAlerts,
     trafficSources,
-  })
-  const insightSummary = buildInsightSummary({
     revenuePerVisitor: stats.revenuePerVisitor,
     cartAbandonmentRate: stats.cartAbandonmentRate,
-    trafficSources,
-    recommendations,
-    inventoryAlerts,
   })
 
-  const catalogProductIds = new Set(products.map((product) => product.id))
-  const fallbackProductId = topProducts[0]?.product_id ?? products[0]?.id ?? "1"
-
-  try {
-    const aiOutput = await buildAiRecommendations({
-      stats,
-      salesData,
-      customerBehavior,
-      inventoryAlerts,
-      fallbackRecommendations: recommendations,
-      fallbackCustomerSegments: customerSegments,
-      fallbackActionItems: actionItems,
-      fallbackInsightSummary: insightSummary,
-    })
-
-    return {
-      generated: true,
-      generatedAt: new Date().toISOString(),
-      stats,
-      salesData,
-      customerBehavior,
-      insightSummary: aiOutput.insightSummary,
-      recommendations: aiOutput.recommendations.map((recommendation) => ({
-        ...recommendation,
-        product_id: catalogProductIds.has(recommendation.product_id)
-          ? recommendation.product_id
-          : fallbackProductId,
-        confidence: round(recommendation.confidence),
-        potential_revenue: round(recommendation.potential_revenue, 2),
-      })),
-      inventoryAlerts,
-      customerSegments: aiOutput.customerSegments,
-      actionItems: aiOutput.actionItems,
-    }
-  } catch {
-    return {
-      generated: false,
-      generatedAt: new Date().toISOString(),
-      stats,
-      salesData,
-      customerBehavior,
-      insightSummary: `AI output unavailable for this request. ${insightSummary}`,
-      recommendations,
-      inventoryAlerts,
-      customerSegments,
-      actionItems,
-    }
+  return {
+    generated: true,
+    generatedAt: new Date().toISOString(),
+    stats,
+    salesData: {
+      totals: {
+        sessions: stats.totalSessions,
+        events: stats.totalEvents,
+        orders: stats.totalOrders,
+        revenue: stats.totalRevenue,
+        conversionRate: stats.totalSessions > 0 ? round((stats.totalOrders / stats.totalSessions) * 100) : 0,
+        revenuePerVisitor: stats.revenuePerVisitor,
+        cartAbandonmentRate: stats.cartAbandonmentRate,
+      },
+      dailyPerformance: buildDailyPerformance(sessions, orders),
+      topProducts: topProducts.slice(0, 10),
+    },
+    customerBehavior: {
+      topPages: buildTopPages(events, sessions),
+      trafficSources,
+      guestSessions: sessions.filter((session) => session.user_type === "guest").length,
+      customerSessions: sessions.filter((session) => session.user_type === "customer").length,
+      avgSessionDurationSeconds: stats.avgSessionDuration,
+    },
+    insightSummary,
+    recommendations,
+    inventoryAlerts,
+    customerSegments,
+    actionItems,
   }
 }
 

@@ -15,6 +15,7 @@ interface ChatWidgetProps {
   currentPageUrl?: string
   activeProductId?: string | null
   onOpen?: () => void
+  storeName?: string
 }
 
 interface ConversationTurn {
@@ -49,6 +50,7 @@ export function ChatWidget({
   currentPageUrl,
   activeProductId,
   onOpen,
+  storeName,
 }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState("")
@@ -77,7 +79,7 @@ export function ChatWidget({
         parts: [
           {
             type: "text",
-            text: "Marhaba! Welcome to SmartSouk. I'm your AI Sales Intelligence Agent. I'm here to help you find the perfect Tunisian handcrafted products tailored to your needs. Let's start with some quick questions to match you with the right items.\n\nFirst question: What sector are you buying for? (e.g., Personal Use, Gift, Business/Resale, Interior Design)",
+            text: `Marhaba! Welcome to ${storeName?.trim() || "SmartSouk"}. I'm your AI Sales Intelligence Agent. I'm here to help you find the perfect Tunisian handcrafted products tailored to your needs. Let's start with some quick questions to match you with the right items.\n\nFirst question: What sector are you buying for? (e.g., Personal Use, Gift, Business/Resale, Interior Design)`,
           },
         ],
       },

@@ -1,35 +1,137 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Package, TrendingUp, Users, DollarSign } from "lucide-react"
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DollarSign, Loader2, Package, TrendingUp, Users } from "lucide-react"
+import type { TrackingStats } from "@/lib/tracking-types"
+import type { StoreProduct, StoreSettings } from "@/lib/store-types"
 
-const stats = [
-  { name: "Total Products", value: "8", icon: Package, change: "+2 this week" },
-  { name: "Total Revenue", value: "2,450 TND", icon: DollarSign, change: "+12% from last month" },
-  { name: "Website Visitors", value: "1,234", icon: Users, change: "+8% from last week" },
-  { name: "Conversion Rate", value: "3.2%", icon: TrendingUp, change: "+0.5% from last month" },
-]
+const emptyStats: TrackingStats = {
+  totalSessions: 0,
+  totalEvents: 0,
+  totalOrders: 0,
+  totalRevenue: 0,
+  avgSessionDuration: 0,
+  revenuePerVisitor: 0,
+  cartAbandonmentRate: 0,
+  cartsStarted: 0,
+  cartsAbandoned: 0,
+}
 
-const recentActivities = [
-  { id: 1, action: "New order", description: "Handwoven Berber Rug purchased", time: "2 hours ago" },
-  { id: 2, action: "Low stock alert", description: "Sejnane Pottery Bowl Set - only 3 left", time: "5 hours ago" },
-  { id: 3, action: "New review", description: "5-star review on Organic Olive Oil", time: "1 day ago" },
-  { id: 4, action: "Campaign completed", description: "Summer Sale campaign ended", time: "2 days ago" },
-]
+interface StoreBootstrapResponse {
+  settings?: StoreSettings
+  products?: StoreProduct[]
+}
+
+interface TrackingResponse {
+  stats?: TrackingStats
+  orders?: Array<{ product_id: string; timestamp: number; price_paid: number }>
+  error?: string
+}
 
 export default function DashboardPage() {
+  const [storeName, setStoreName] = useState("SmartSouk")
+  const [products, setProducts] = useState<StoreProduct[]>([])
+  const [stats, setStats] = useState<TrackingStats>(emptyStats)
+  const [recentOrders, setRecentOrders] = useState<Array<{ product_id: string; timestamp: number; price_paid: number }>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [storeResponse, trackingResponse] = await Promise.all([
+          fetch("/api/store/bootstrap", {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+          }),
+          fetch("/api/track", {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+          }),
+        ])
+
+        if (storeResponse.ok) {
+          const storeBody = (await storeResponse.json()) as StoreBootstrapResponse
+          const nextStoreName = storeBody.settings?.store_name?.trim()
+          if (nextStoreName) {
+            setStoreName(nextStoreName)
+          }
+          setProducts(Array.isArray(storeBody.products) ? storeBody.products : [])
+        }
+
+        if (trackingResponse.ok) {
+          const trackingBody = (await trackingResponse.json()) as TrackingResponse
+          setStats(trackingBody.stats ?? emptyStats)
+          setRecentOrders(Array.isArray(trackingBody.orders) ? trackingBody.orders.slice(0, 5) : [])
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void load()
+  }, [])
+
+  const statsCards = useMemo(
+    () => [
+      {
+        name: "Total Products",
+        value: String(products.length),
+        icon: Package,
+        change: `${products.filter((product) => product.stock_status === "in_stock").length} in stock`,
+      },
+      {
+        name: "Total Revenue",
+        value: `${stats.totalRevenue} TND`,
+        icon: DollarSign,
+        change: `${stats.totalOrders} confirmed orders`,
+      },
+      {
+        name: "Website Visitors",
+        value: String(stats.totalSessions),
+        icon: Users,
+        change: `${stats.totalEvents} tracked events`,
+      },
+      {
+        name: "Conversion Rate",
+        value: `${stats.totalSessions > 0 ? ((stats.totalOrders / stats.totalSessions) * 100).toFixed(1) : "0.0"}%`,
+        icon: TrendingUp,
+        change: `Cart abandonment ${stats.cartAbandonmentRate}%`,
+      },
+    ],
+    [products, stats]
+  )
+
+  const productNameById = useMemo(
+    () => new Map(products.map((product) => [product.id, product.name])),
+    [products]
+  )
+
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
-          Welcome back! Here&apos;s an overview of your SmartSouk business.
+          Welcome back! Here&apos;s an overview of your {storeName} business.
         </p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+        {statsCards.map((stat) => (
           <Card key={stat.name}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -93,15 +195,18 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3">
+              {recentOrders.length === 0 && (
+                <p className="text-sm text-muted-foreground">No recent orders yet.</p>
+              )}
+              {recentOrders.map((order) => (
+                <div key={`${order.product_id}-${order.timestamp}`} className="flex items-start gap-3">
                   <div className="h-2 w-2 mt-2 rounded-full bg-primary" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium">{activity.action}</p>
+                    <p className="text-sm font-medium">New order</p>
                     <p className="text-sm text-muted-foreground">
-                      {activity.description}
+                      {productNameById.get(order.product_id) ?? "Unknown Product"} purchased for {order.price_paid} TND
                     </p>
-                    <p className="text-xs text-muted-foreground">{activity.time}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(order.timestamp).toLocaleString()}</p>
                   </div>
                 </div>
               ))}

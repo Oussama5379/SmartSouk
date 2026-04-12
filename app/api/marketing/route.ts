@@ -1,6 +1,6 @@
 import { generateText, Output } from "ai"
 import { z } from "zod"
-import type { Product } from "@/lib/mock-data"
+import type { StoreProduct } from "@/lib/store-types"
 
 const campaignSchema = z.object({
   instagram_caption: z
@@ -16,7 +16,7 @@ const campaignSchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const { product, goal }: { product: Product; goal: string } = await req.json()
+  const { product, goal }: { product: StoreProduct; goal: string } = await req.json()
 
   const prompt = `Act as an expert digital marketer specializing in artisanal and handcrafted products from Tunisia.
 

@@ -1,6 +1,7 @@
 import { generateText, tool } from "ai"
 import { z } from "zod"
-import { getProductById } from "@/lib/mock-data"
+import { getStoreSettings, listStoreProducts } from "@/lib/store-data"
+import type { StoreProduct } from "@/lib/store-types"
 import { getSessionSignals } from "@/lib/tracking-store"
 import type { LeadQualificationResult } from "@/lib/tracking-types"
 
@@ -24,12 +25,15 @@ function formatConversationHistory(conversationHistory: ConversationTurn[]): str
 }
 
 function buildSessionContext(params: {
+  products: StoreProduct[]
   currentPageUrl?: string
   activeProductId?: string
   viewedProductIds: string[]
   lastTrackedPage: string | null
 }): string {
   const contextLines: string[] = []
+
+  const getProductById = (id: string) => params.products.find((product) => product.id === id)
 
   if (params.currentPageUrl) {
     contextLines.push(`Current page URL: ${params.currentPageUrl}`)
@@ -82,12 +86,14 @@ export async function POST(req: Request) {
       typeof body.active_product_id === "string" ? body.active_product_id.trim() : undefined
     const currentPageUrl =
       typeof body.current_page_url === "string" ? body.current_page_url.trim() : undefined
+    const [products, settings] = await Promise.all([listStoreProducts(), getStoreSettings()])
 
     const { viewedProductIds, lastPage } = sessionId
       ? await getSessionSignals(sessionId)
       : { viewedProductIds: [], lastPage: null }
 
     const sessionContext = buildSessionContext({
+      products,
       currentPageUrl,
       activeProductId,
       viewedProductIds,
@@ -96,7 +102,7 @@ export async function POST(req: Request) {
 
     const result = await generateText({
       model: "openai/gpt-4o-mini",
-      system: `You are a sales qualification assistant for SmartSouk.
+      system: `You are a sales qualification assistant for ${settings.store_name}.
 Your task is to score this lead and recommend the best next action.
 You must call scoreAndRecommend exactly once with a pragmatic sales assessment.`,
       prompt: `Conversation transcript:

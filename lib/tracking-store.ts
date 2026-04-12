@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless"
 import { Redis } from "@upstash/redis"
-import type { Order, Session } from "@/lib/mock-data"
+import type { Order, Session } from "@/lib/store-types"
 import {
   isTrackEventType,
   type SessionSignals,

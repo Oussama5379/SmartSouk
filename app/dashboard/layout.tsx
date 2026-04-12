@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import { BarChart3, Home, Megaphone, Package, Settings, Activity, Mail, Lightbulb } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -22,6 +23,36 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const [storeName, setStoreName] = useState("SmartSouk")
+
+  useEffect(() => {
+    const loadStoreName = async () => {
+      try {
+        const response = await fetch("/api/store/settings", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        })
+
+        if (!response.ok) {
+          return
+        }
+
+        const body = (await response.json()) as {
+          settings?: { store_name?: string }
+        }
+
+        const nextStoreName = body.settings?.store_name?.trim()
+        if (nextStoreName) {
+          setStoreName(nextStoreName)
+        }
+      } catch {
+        // Keep fallback store name if settings endpoint is unavailable.
+      }
+    }
+
+    void loadStoreName()
+  }, [])
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -32,9 +63,9 @@ export default function DashboardLayout({
           <div className="flex h-16 items-center border-b px-6">
             <Link href="/" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-                S
+                {storeName.charAt(0).toUpperCase() || "S"}
               </div>
-              <span className="text-lg font-semibold">SmartSouk</span>
+              <span className="text-lg font-semibold">{storeName}</span>
             </Link>
           </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { products } from '@/lib/mock-data'
+import type { StoreProduct } from '@/lib/store-types'
 import {
   Mail,
   Send,
@@ -38,12 +38,36 @@ interface EmailSequence {
 }
 
 export default function EmailCampaignsPage() {
+  const [products, setProducts] = useState<StoreProduct[]>([])
   const [campaignType, setCampaignType] = useState('')
   const [selectedProduct, setSelectedProduct] = useState('')
   const [segment, setSegment] = useState('')
   const [loading, setLoading] = useState(false)
   const [sequence, setSequence] = useState<EmailSequence | null>(null)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const response = await fetch('/api/store/products', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+        })
+
+        if (!response.ok) {
+          return
+        }
+
+        const body = (await response.json()) as { products?: StoreProduct[] }
+        setProducts(Array.isArray(body.products) ? body.products : [])
+      } catch {
+        // Keep products empty if API is unavailable.
+      }
+    }
+
+    void loadProducts()
+  }, [])
 
   const generateCampaign = async () => {
     if (!campaignType || !selectedProduct || !segment) return

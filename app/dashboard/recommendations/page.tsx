@@ -5,7 +5,7 @@ import { AlertTriangle, BarChart3, Gift, Lightbulb, Loader2, TrendingUp, Users }
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { products } from "@/lib/mock-data"
+import type { StoreProduct } from "@/lib/store-types"
 import type { RecommendationItem, RecommendationsApiResponse } from "@/lib/tracking-types"
 
 const emptyRecommendationsResponse: RecommendationsApiResponse = {
@@ -50,6 +50,7 @@ const emptyRecommendationsResponse: RecommendationsApiResponse = {
 }
 
 export default function ProductIntelligencePage() {
+  const [products, setProducts] = useState<StoreProduct[]>([])
   const [payload, setPayload] = useState<RecommendationsApiResponse>(emptyRecommendationsResponse)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -59,19 +60,31 @@ export default function ProductIntelligencePage() {
     setErrorMessage(null)
 
     try {
-      const response = await fetch("/api/recommendations", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-      })
+      const [recommendationsResponse, productsResponse] = await Promise.all([
+        fetch("/api/recommendations", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }),
+        fetch("/api/store/products", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }),
+      ])
 
-      const body = (await response.json()) as RecommendationsApiResponse & { error?: string }
-      if (!response.ok) {
+      const body = (await recommendationsResponse.json()) as RecommendationsApiResponse & { error?: string }
+      if (!recommendationsResponse.ok) {
         setErrorMessage(body.error ?? "Failed to load recommendations")
         return
       }
 
       setPayload(body)
+
+      if (productsResponse.ok) {
+        const productsBody = (await productsResponse.json()) as { products?: StoreProduct[] }
+        setProducts(Array.isArray(productsBody.products) ? productsBody.products : [])
+      }
     } catch {
       setErrorMessage("Failed to load recommendations")
     } finally {
@@ -137,7 +150,7 @@ export default function ProductIntelligencePage() {
       topPerformerProduct: topPerformer ? getProductName(topPerformer.product_id) : "N/A",
       opportunityRevenue: opportunityRevenue.toFixed(1),
     }
-  }, [payload.inventoryAlerts.length, payload.recommendations])
+  }, [payload.inventoryAlerts.length, payload.recommendations, products])
 
   if (loading) {
     return (

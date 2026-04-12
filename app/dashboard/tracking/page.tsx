@@ -5,8 +5,7 @@ import { Clock, Eye, Loader2, ShoppingCart, TrendingUp, Users } from "lucide-rea
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import type { Order, Session } from "@/lib/mock-data"
-import { products } from "@/lib/mock-data"
+import type { Order, Session, StoreProduct } from "@/lib/store-types"
 import type { TrackedProductEvent, TrackingStats } from "@/lib/tracking-types"
 
 interface TrackingApiResponse {
@@ -31,6 +30,7 @@ const emptyStats: TrackingStats = {
 
 export default function TrackingDashboard() {
   const [stats, setStats] = useState<TrackingStats>(emptyStats)
+  const [products, setProducts] = useState<StoreProduct[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
   const [events, setEvents] = useState<TrackedProductEvent[]>([])
   const [orders, setOrders] = useState<Order[]>([])
@@ -42,22 +42,32 @@ export default function TrackingDashboard() {
     setErrorMessage(null)
 
     try {
-      const response = await fetch("/api/track", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-      })
+      const [trackingResponse, productsResponse] = await Promise.all([
+        fetch("/api/track", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }),
+        fetch("/api/store/products", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        }),
+      ])
 
-      const payload = (await response.json()) as TrackingApiResponse
-      if (!response.ok) {
-        setErrorMessage(payload.error ?? "Failed to load tracking data")
+      const trackingPayload = (await trackingResponse.json()) as TrackingApiResponse
+      if (!trackingResponse.ok) {
+        setErrorMessage(trackingPayload.error ?? "Failed to load tracking data")
         return
       }
 
-      setStats(payload.stats ?? emptyStats)
-      setSessions(Array.isArray(payload.sessions) ? payload.sessions : [])
-      setEvents(Array.isArray(payload.events) ? payload.events : [])
-      setOrders(Array.isArray(payload.orders) ? payload.orders : [])
+      const productsPayload = (await productsResponse.json()) as { products?: StoreProduct[] }
+
+      setStats(trackingPayload.stats ?? emptyStats)
+      setSessions(Array.isArray(trackingPayload.sessions) ? trackingPayload.sessions : [])
+      setEvents(Array.isArray(trackingPayload.events) ? trackingPayload.events : [])
+      setOrders(Array.isArray(trackingPayload.orders) ? trackingPayload.orders : [])
+      setProducts(Array.isArray(productsPayload.products) ? productsPayload.products : [])
     } catch {
       setErrorMessage("Failed to load tracking data")
     } finally {

@@ -1,63 +1,30 @@
-import { getProductById, products, type Product } from "@/lib/mock-data"
 import { extractBudgetCeiling, rankDocumentsByQuery, tokenizeForRag, type RagDocument } from "@/lib/rag-utils"
+import type { StoreProduct } from "@/lib/store-types"
 
 export interface RetrievedCatalogProduct {
-  product: Product
+  product: StoreProduct
   score: number
   reasons: string[]
 }
 
-const CATEGORY_INTENT_KEYWORDS: Record<Product["category"], string[]> = {
-  ceramics: [
-    "ceramic",
-    "ceramics",
-    "pottery",
-    "plate",
-    "vase",
-    "bowl",
-    "tableware",
-    "decor",
-    "decoration",
-  ],
+const CATEGORY_INTENT_KEYWORDS: Record<StoreProduct["category"], string[]> = {
+  ceramics: ["ceramic", "ceramics", "pottery", "plate", "vase", "bowl", "tableware", "decor"],
   rugs: ["rug", "rugs", "kilim", "runner", "home", "living", "floor", "interior", "style"],
-  oils: [
-    "oil",
-    "oils",
-    "olive",
-    "argan",
-    "prickly",
-    "skin",
-    "hair",
-    "beauty",
-    "cooking",
-    "gift",
-  ],
+  oils: ["oil", "oils", "olive", "argan", "prickly", "skin", "hair", "beauty", "gift"],
 }
 
-const STOCK_ORDER: Record<Product["stock_status"], number> = {
+const STOCK_ORDER: Record<StoreProduct["stock_status"], number> = {
   in_stock: 2,
   low_stock: 1,
   out_of_stock: 0,
 }
 
-const catalogDocuments: Array<RagDocument<Product>> = products.map((product) => ({
-  id: product.id,
-  metadata: product,
-  content: [
-    product.name,
-    product.category,
-    `${product.price_tnd} tnd`,
-    product.stock_status.replace(/_/g, " "),
-    product.description,
-  ].join(" "),
-}))
-
-function detectCategoryIntent(query: string): Set<Product["category"]> {
+function detectCategoryIntent(query: string): Set<StoreProduct["category"]> {
   const tokens = new Set(tokenizeForRag(query))
-  const detected = new Set<Product["category"]>()
+  const detected = new Set<StoreProduct["category"]>()
 
   for (const [category, keywords] of Object.entries(CATEGORY_INTENT_KEYWORDS) as Array<
-    [Product["category"], string[]]
+    [StoreProduct["category"], string[]]
   >) {
     for (const keyword of keywords) {
       if (tokens.has(keyword)) {
@@ -82,7 +49,12 @@ function applyBudgetScore(price: number, budgetCeiling: number): number {
   return -0.08
 }
 
+function getProductById(products: StoreProduct[], id: string): StoreProduct | undefined {
+  return products.find((product) => product.id === id)
+}
+
 export function buildCatalogRetrievalQuery(params: {
+  products: StoreProduct[]
   conversationText: string
   activeProductId?: string
   viewedProductIds?: string[]
@@ -90,19 +62,20 @@ export function buildCatalogRetrievalQuery(params: {
   lastTrackedPage?: string | null
 }): string {
   const lines: string[] = []
+
   if (params.conversationText.trim()) {
     lines.push(params.conversationText.trim())
   }
 
   if (params.activeProductId) {
-    const activeProduct = getProductById(params.activeProductId)
+    const activeProduct = getProductById(params.products, params.activeProductId)
     if (activeProduct) {
       lines.push(`Customer is focused on ${activeProduct.name} (${activeProduct.category}).`)
     }
   }
 
   const viewedProductNames = (params.viewedProductIds ?? [])
-    .map((productId) => getProductById(productId)?.name)
+    .map((productId) => getProductById(params.products, productId)?.name)
     .filter((name): name is string => Boolean(name))
   if (viewedProductNames.length > 0) {
     lines.push(`Viewed products: ${viewedProductNames.join(", ")}.`)
@@ -118,6 +91,7 @@ export function buildCatalogRetrievalQuery(params: {
 }
 
 export function retrieveCatalogProducts(params: {
+  products: StoreProduct[]
   query: string
   activeProductId?: string
   viewedProductIds?: string[]
@@ -125,13 +99,25 @@ export function retrieveCatalogProducts(params: {
   includeOutOfStock?: boolean
 }): RetrievedCatalogProduct[] {
   const limit = params.limit ?? 4
-  const ranked = rankDocumentsByQuery(params.query, catalogDocuments, catalogDocuments.length)
+  const documents: Array<RagDocument<StoreProduct>> = params.products.map((product) => ({
+    id: product.id,
+    metadata: product,
+    content: [
+      product.name,
+      product.category,
+      `${product.price_tnd} tnd`,
+      product.stock_status.replace(/_/g, " "),
+      product.description,
+    ].join(" "),
+  }))
+
+  const ranked = rankDocumentsByQuery(params.query, documents, documents.length)
   const scoreById = new Map(ranked.map((entry) => [entry.id, entry.score]))
   const viewedProductSet = new Set((params.viewedProductIds ?? []).map((id) => id.trim()).filter(Boolean))
   const categoryIntent = detectCategoryIntent(params.query)
   const budgetCeiling = extractBudgetCeiling(params.query)
 
-  const scoredProducts: RetrievedCatalogProduct[] = products.map((product) => {
+  const scoredProducts: RetrievedCatalogProduct[] = params.products.map((product) => {
     let score = scoreById.get(product.id) ?? 0
     const reasons: string[] = []
 

@@ -1,13 +1,15 @@
 import { convertToModelMessages, streamText, type UIMessage } from "ai"
-import { getProductById } from "@/lib/mock-data"
+import { getStoreSettings, listStoreProducts } from "@/lib/store-data"
 import {
   buildCatalogRetrievalQuery,
   formatRetrievedCatalogContext,
   retrieveCatalogProducts,
 } from "@/lib/product-rag"
+import type { StoreProduct } from "@/lib/store-types"
 import { getSessionSignals } from "@/lib/tracking-store"
 
-const baseSystemPrompt = `You are a friendly, highly persuasive Tunisian sales assistant for SmartSouk, a Tunisian artisanal concept store.
+function getBaseSystemPrompt(storeName: string): string {
+  return `You are a friendly, highly persuasive Tunisian sales assistant for ${storeName}, a Tunisian artisanal concept store.
 
 Use the RETRIEVED CATALOG CONTEXT provided in this prompt as your source of truth.
 
@@ -24,6 +26,7 @@ Important guidelines:
 - If a product in context is "out of stock", mention it's currently unavailable and suggest alternatives from context
 - Always mention prices in TND (Tunisian Dinar)
 - If asked about shipping, say you ship worldwide with tracking`
+}
 
 interface ChatRouteBody {
   messages?: UIMessage[]
@@ -52,22 +55,29 @@ function getRecentUserIntent(messages: UIMessage[], limit = 3): string {
   return userTurns.slice(-limit).join(" ")
 }
 
-function getProductNamesByIds(productIds: string[]): string[] {
+function getProductById(products: StoreProduct[], productId: string): StoreProduct | undefined {
+  return products.find((product) => product.id === productId)
+}
+
+function getProductNamesByIds(products: StoreProduct[], productIds: string[]): string[] {
   return productIds
-    .map((productId) => getProductById(productId)?.name)
+    .map((productId) => getProductById(products, productId)?.name)
     .filter((name): name is string => typeof name === "string")
 }
 
 function buildPersonalizationContext(params: {
+  products: StoreProduct[]
   currentPageUrl?: string
   activeProductId?: string
   viewedProductIds: string[]
   lastTrackedPage?: string | null
 }): string {
   const contextLines: string[] = []
-  const { currentPageUrl, activeProductId, viewedProductIds, lastTrackedPage } = params
-  const activeProductName = activeProductId ? getProductById(activeProductId)?.name : undefined
-  const viewedProductNames = getProductNamesByIds(viewedProductIds)
+  const { products, currentPageUrl, activeProductId, viewedProductIds, lastTrackedPage } = params
+  const activeProductName = activeProductId
+    ? getProductById(products, activeProductId)?.name
+    : undefined
+  const viewedProductNames = getProductNamesByIds(products, viewedProductIds)
 
   if (currentPageUrl) {
     contextLines.push(`Current page URL: ${currentPageUrl}`)
@@ -105,17 +115,25 @@ export async function POST(req: Request) {
       typeof body.current_page_url === "string" ? body.current_page_url.trim() : ""
     const activeProductId =
       typeof body.active_product_id === "string" ? body.active_product_id.trim() : undefined
+    const [catalogProducts, settings] = await Promise.all([listStoreProducts(), getStoreSettings()])
+
+    if (catalogProducts.length === 0) {
+      return Response.json({ error: "No products available in catalog" }, { status: 500 })
+    }
+
     const { viewedProductIds, lastPage } = sessionId
       ? await getSessionSignals(sessionId)
       : { viewedProductIds: [], lastPage: null }
 
     const personalizedSystemPrompt = buildPersonalizationContext({
+      products: catalogProducts,
       currentPageUrl: currentPageUrl || undefined,
       activeProductId,
       viewedProductIds,
       lastTrackedPage: lastPage,
     })
     const retrievalQuery = buildCatalogRetrievalQuery({
+      products: catalogProducts,
       conversationText: getRecentUserIntent(body.messages),
       activeProductId,
       viewedProductIds,
@@ -123,13 +141,17 @@ export async function POST(req: Request) {
       lastTrackedPage: lastPage,
     })
     const retrievedCatalog = retrieveCatalogProducts({
+      products: catalogProducts,
       query: retrievalQuery,
       activeProductId,
       viewedProductIds,
       limit: 4,
     })
     const ragCatalogContext = formatRetrievedCatalogContext(retrievedCatalog)
-    const systemPromptSections = [baseSystemPrompt, `RETRIEVED CATALOG CONTEXT:\n${ragCatalogContext}`]
+    const systemPromptSections = [
+      getBaseSystemPrompt(settings.store_name),
+      `RETRIEVED CATALOG CONTEXT:\n${ragCatalogContext}`,
+    ]
     if (personalizedSystemPrompt) {
       systemPromptSections.push(`CUSTOMER CONTEXT:\n${personalizedSystemPrompt}`)
     }
