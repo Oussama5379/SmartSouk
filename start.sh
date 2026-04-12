@@ -1,0 +1,6 @@
+'cd /app/backend'  
+'# Start Python backend on internal port 8000'  
+'cd /app'  
+'# Start Next.js frontend on Render provided PORT or 3000'  
+'export PORT=`${PORT:-3000}'  
+'pnpm start --port `$PORT'  

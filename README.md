@@ -1,239 +1,148 @@
-# Aurea — AI-Powered SMB Marketing Platform
+# Aurea — AI-Powered Smart Business Suite
 
-An AI platform for small and medium businesses combining marketing automation, sales intelligence, and analytics. Built for LunarHack.
+Aurea est une plateforme IA pensée pour les PME, avec trois capacités intégrées: **analytics**, **agent conversationnel de vente** et **assistant marketing génératif**.  
+Le dépôt contient une application web Next.js complète, des APIs IA et un backend FastAPI complémentaire.
 
----
+## Problématique du challenge
 
-## What's Actually Built
+Les PME manquent souvent d’outils accessibles pour:
 
-### Frontend + Next.js API layer (`/`)
-- **Next.js 16** App Router, TypeScript, Tailwind CSS v4, shadcn/ui
-- Dashboard with pages: Overview, Products, Marketing AI, Product Intel, Email Campaigns, User Tracking, Analytics, Settings
-- Better Auth login/signup flow (`/login`, `/signup`) with email/password and Google OAuth
-- Floating chat widget on the storefront (sales agent)
-- All AI calls go through Next.js API routes, which proxy to OpenAI via Vercel AI SDK
+- exploiter leurs données clients et ventes,
+- automatiser leur marketing,
+- engager efficacement leurs prospects et clients.
 
-### Python Backend (`/backend`)
-- **FastAPI** server handling image generation and prompt enhancement
-- `POST /api/generate-image` — HuggingFace FLUX.1-schnell (via nscale provider)
-- `POST /api/enhance-prompt` — Gemini 2.5 Flash Lite rewrites rough prompts into production-ready image prompts
-- `POST /api/generate-captions` — Gemini 2.5 Flash Lite generates social media captions per tone/platform
-- `GET  /health`
+Le challenge demande de concevoir une plateforme AI qui rend une PME “smart” en combinant:
 
-### Separate Express prototype (`/lunarhack`)
-- Standalone vanilla HTML/CSS/JS app with its own Express server
-- Duplicate of image gen + caption logic — predates the Next.js app and FastAPI backend
-- Can be retired once FastAPI is confirmed working
+1. **Smart Analytics Dashboard**  
+2. **Sales Intelligence Agent**  
+3. **Marketing AI Assistant**
 
----
+> Exigence officielle: couvrir au minimum **2 piliers** avec profondeur et utilité réelle.
 
-## Tech Stack
+## Couverture des piliers dans ce repo
 
-| Layer | Tech |
-|---|---|
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4, shadcn/ui |
-| Next.js AI routes | Vercel AI SDK 6, OpenAI GPT-4o-mini (streaming + structured output) |
-| Python backend | FastAPI, Uvicorn, httpx, Pillow |
-| Image generation | HuggingFace Inference API — FLUX.1-schnell (nscale provider) |
-| Prompt/caption AI | Google Gemini 2.5 Flash Lite |
-| Data | Mock product catalog + Neon Postgres tracking + Upstash session context cache |
+| Pilier | Attendu par le challenge | Implémentation dans Aurea |
+| --- | --- | --- |
+| Smart Analytics Dashboard | KPIs temps réel, insights automatiques, recommandations actionnables | `/dashboard`, `/dashboard/analytics`, `/dashboard/recommendations`, `/dashboard/tracking`, `GET/POST /api/recommendations`, `GET/POST /api/track`, `POST /api/webhooks/payment` |
+| Sales Intelligence Agent | Chat conversationnel, qualification des besoins, recommandation commerciale personnalisée | Widget chat sur `/`, `POST /api/chat` (RAG catalogue + contexte session), `POST /api/qualify-lead` (lead scoring + next actions) |
+| Marketing AI Assistant | Génération d’idées, textes, visuels et contenu de campagne | `/dashboard/marketing`, `POST /api/enhance-prompt`, `POST /api/generate-image`, `POST /api/generate-captions`, `POST /api/marketing/suggest-email`, `POST /api/marketing/send-email`, `GET /api/marketing/segments` |
 
----
+**Statut:** ce dépôt couvre **3/3 piliers**.
 
-## Project Structure
+## Cas d’usage démontré
 
-```
+Le prototype est appliqué à un **secteur e-commerce artisanal** (storefront SmartSouk):
+
+1. Le visiteur échange avec l’agent IA pour être orienté vers des produits pertinents.
+2. Les équipes suivent les performances (sessions, conversion, revenus, abandon panier, sources de trafic).
+3. L’équipe marketing génère visuels, captions multi-tons et emails de campagne, puis lance l’envoi.
+
+## Stack technique
+
+| Couche | Technologies |
+| --- | --- |
+| Frontend & app | Next.js 16, React 19, TypeScript, Tailwind CSS v4, shadcn/ui |
+| IA texte/conversation | Vercel AI SDK + `@ai-sdk/google` (Gemini) |
+| IA image | HuggingFace Inference (`black-forest-labs/FLUX.1-schnell`, provider nscale) |
+| Backend Python | FastAPI, Uvicorn, httpx, Pillow |
+| Données | Neon Postgres (`sessions`, `product_events`, `orders`, `store_products`, `store_settings`) |
+| Cache contexte session | Upstash Redis (optionnel) |
+| Auth | Better Auth (email/password + Google OAuth optionnel) |
+| Email | Nodemailer SMTP (envoi de campagnes) |
+
+## Structure du projet
+
+```text
 Aurea/
-├── app/
-│   ├── page.tsx                      # Storefront homepage + chat widget
-│   ├── dashboard/
-│   │   ├── layout.tsx                # Sidebar navigation
-│   │   ├── page.tsx                  # Overview KPIs
-│   │   ├── products/page.tsx
-│   │   ├── marketing/page.tsx        # Campaign builder + image gen
-│   │   ├── recommendations/page.tsx  # Product intelligence
-│   │   ├── email-campaigns/page.tsx  # Email sequence builder
-│   │   ├── analytics/page.tsx        # AI insights dashboard
-│   │   ├── tracking/page.tsx         # Session / event tracking
-│   │   └── settings/page.tsx
-│   └── api/
-│       ├── chat/route.ts             # Streaming sales chat (GPT-4o-mini)
-│       ├── marketing/route.ts        # Campaign generation (GPT-4o-mini, structured output)
-│       ├── content-variants/route.ts # 3-tone content variants
-│       ├── insights/route.ts         # Analytics AI insights
-│       ├── recommendations/route.ts  # Cross-sell / upsell recommendations
-│       ├── email-campaign/route.ts   # 3-email sequence generation
-│       ├── qualify-lead/route.ts     # Lead scoring with tool-calling
-│       ├── generate-image/route.ts   # HuggingFace FLUX image gen (mirrors backend)
-│       └── enhance-prompt/route.ts   # Gemini prompt enhancement (mirrors backend)
-├── backend/                          # FastAPI Python backend
+├── app/                      # UI Next.js + routes API
+│   ├── page.tsx              # storefront + chat agent
+│   ├── dashboard/            # analytics, marketing, tracking, products, settings
+│   └── api/                  # endpoints IA, tracking, store, auth, webhooks
+├── backend/                  # API FastAPI (image/captions/health)
 │   ├── main.py
 │   ├── requirements.txt
-│   ├── .env.example
 │   └── routers/
-│       ├── health.py
-│       ├── image.py                  # /api/generate-image, /api/enhance-prompt
-│       └── captions.py              # /api/generate-captions
-├── components/
-│   ├── chat-widget.tsx
-│   └── ui/                           # shadcn/ui components
-├── lib/
-│   ├── mock-data.ts                  # Products + mock sessions/events/orders
-│   └── utils.ts
-├── lunarhack/                        # Standalone Express prototype (legacy)
-└── public/
+├── components/               # UI components (dont le chat-widget)
+├── hooks/
+├── lib/                      # logique métier (store, tracking, auth, email, types)
+├── db/
+│   └── migrations/
+└── scripts/
 ```
 
----
+## Démarrage rapide
 
-## Getting Started
-
-### Prerequisites
-- Node.js 18+, pnpm
-- Python 3.11+
-
-### Next.js app
+### 1) Application Next.js
 
 ```bash
 pnpm install
-cp .env.local.example .env.local   # fill in OPENAI_API_KEY
-pnpm dev                            # http://localhost:3000 (or 3001 if backend is on 3000)
 ```
 
-### FastAPI backend
+Créez `.env.local` depuis `.env.local.example`, puis renseignez les clés.
+
+PowerShell:
+
+```powershell
+Copy-Item .env.local.example .env.local
+```
+
+Bash:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Lancez l’application:
+
+```bash
+pnpm dev
+```
+
+### 2) Backend FastAPI (optionnel mais disponible)
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate           # Windows: .venv\Scripts\activate
+```
+
+Activation:
+
+- Windows (PowerShell): `.\.venv\Scripts\Activate.ps1`
+- macOS/Linux: `source .venv/bin/activate`
+
+Installation + run:
+
+```bash
 pip install -r requirements.txt
-cp .env.example .env                # fill in GEMINI_API_KEY and HF_TOKEN
 uvicorn main:app --reload --port 8000
 ```
 
-Backend runs on `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
+Assurez-vous que `HF_TOKEN` et `GEMINI_API_KEY` sont définis dans l’environnement de lancement.
 
----
+## Variables d’environnement principales
 
-## Environment Variables
+| Variable | Rôle |
+| --- | --- |
+| `DATABASE_URL` | Base Neon Postgres (tracking + store + auth) |
+| `BETTER_AUTH_SECRET` | Secret Better Auth (obligatoire) |
+| `BETTER_AUTH_URL`, `NEXT_PUBLIC_BETTER_AUTH_URL` | URL applicative |
+| `ADMIN_EMAILS` | Emails autorisés pour routes admin |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Modèles Gemini via `@ai-sdk/google` |
+| `GEMINI_API_KEY` | Appels Gemini directs (prompt/captions/fallbacks) |
+| `HF_TOKEN` | Génération d’images FLUX via HuggingFace |
+| `OPENAI_API_KEY` | Optionnel (utilisé par `/api/marketing/suggest-email`) |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Cache contexte session (optionnel) |
+| `PAYMENT_WEBHOOK_SECRET` | Sécurisation de `/api/webhooks/payment` |
+| `SMTP_USER`, `SMTP_PASSWORD` | Envoi d’emails campagnes (`/api/marketing/send-email`) |
 
-### Next.js (`.env.local`)
-```env
-OPENAI_API_KEY=sk-...        # GPT-4o-mini for all chat/marketing/insights routes
-HF_TOKEN=hf_...              # HuggingFace token for image generation
-GEMINI_API_KEY=AIza...       # Gemini 2.5 Flash Lite for prompt enhancement
-FASTAPI_URL=http://localhost:8000   # FastAPI backend URL (optional, for proxying)
-DATABASE_URL=postgresql://...       # Neon Postgres URL for sessions/events/orders tracking
-BETTER_AUTH_SECRET=...              # 32+ char secret used by Better Auth
-BETTER_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
-GOOGLE_CLIENT_ID=...                # Google OAuth app client ID
-GOOGLE_CLIENT_SECRET=...            # Google OAuth app client secret
-UPSTASH_REDIS_REST_URL=https://...  # Upstash Redis REST URL for session context cache
-UPSTASH_REDIS_REST_TOKEN=...        # Upstash Redis REST token
-PAYMENT_WEBHOOK_SECRET=...          # Shared secret used by /api/webhooks/payment
-ADMIN_EMAILS=admin@example.com      # Comma-separated admin emails allowed for protected admin APIs
-```
+Optionnel selon configuration auth/email:
 
-### FastAPI backend (`backend/.env`)
-```env
-GEMINI_API_KEY=AIza...
-HF_TOKEN=hf_...
-```
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Google OAuth)
+- `RESEND_API_KEY`, `EMAIL_FROM` (email verification Better Auth)
 
----
+## Migrations auth (si `DATABASE_URL` est configurée)
 
-## API Endpoints
-
-### Next.js API routes (serverless, streaming)
-| Endpoint | Method | What it does |
-|---|---|---|
-| `/api/auth/[...all]` | GET/POST | Better Auth handler for session, email/password, and OAuth flows |
-| `/api/chat` | POST | Streaming sales chat with session/page/product context + retrieved catalog grounding (RAG) |
-| `/api/marketing` | POST | Campaign generation — caption, hashtags, image prompt, strategy |
-| `/api/marketing/segments` | GET | Builds lifecycle segments (Target, High Value, New, Inactive, VIP) from spend + behavior signals for email targeting |
-| `/api/content-variants` | POST | 3 tone variants (Professional / Fun / Storytelling) |
-| `/api/insights` | POST | AI analysis of analytics data |
-| `/api/recommendations` | GET/POST | Deterministic market-basket/RFM/inventory signals + analytics RAG synthesis for insight summary and actions (protected) |
-| `/api/dashboard/insights` | GET | Authenticated user dashboard summary: spending totals, category breakdown, recent purchases, most bought item, and cached recommendation (12h refresh) |
-| `/api/email-campaign` | POST | 3-email sequence (Hook → Social Proof → Urgency) |
-| `/api/qualify-lead` | POST | JSON lead score + recommendations with tool-calling |
-| `/api/generate-image` | POST | FLUX.1-schnell image generation |
-| `/api/enhance-prompt` | POST | Gemini prompt enhancement |
-| `/api/track` | POST/GET | POST ingests session/product events; GET returns tracking dashboard data and now requires authenticated admin access |
-| `/api/webhooks/payment` | POST | Secure server-side order logging from confirmed payment webhooks with idempotency enforced by `payment_reference` |
-| `/api/store/cart/checkout` | POST | Confirms cart checkout (multi-item) and records each confirmed order |
-
-### Admin API protection
-- `POST /api/store/products`, `PATCH/DELETE /api/store/products/[id]`, `PUT /api/store/settings`, `GET/POST /api/recommendations`, `GET /api/marketing/segments`, and `GET /api/track` require an authenticated session.
-- If `ADMIN_EMAILS` is configured, only those emails (or users with `role = "admin"`) can call protected admin routes.
-- `POST /api/track` and `POST /api/store/purchase` now ignore spoofed `user_id` payload values and trust authenticated session identity when present.
-
-### Better Auth + Neon migrations
 ```bash
-pnpm auth:generate   # generates SQL at db/migrations/better-auth.sql
-pnpm auth:migrate    # applies Better Auth tables to current DATABASE_URL
-```
-
-These commands are repeatable and safe for branch databases. Re-run `auth:migrate` after enabling new Better Auth options/plugins.
-
-### Neon branch-per-git-branch workflow
-```bash
-# Create a Neon branch for your current git branch (or pass -BranchName)
-pnpm neon:branch -- -ProjectId <neon-project-id> -ParentBranch main
-
-# Equivalent raw CLI example
-neon branches create --project-id <neon-project-id> --name <git-branch-name> --parent main
-neon connection-string <git-branch-name> --project-id <neon-project-id>
-```
-
-Set `DATABASE_URL` from that branch connection string, then run `pnpm auth:migrate` so auth users/sessions remain isolated per branch.
-
-### FastAPI backend (long-running, Python)
-| Endpoint | Method | What it does |
-|---|---|---|
-| `/health` | GET | Health check |
-| `/api/generate-image` | POST | FLUX.1-schnell via HuggingFace (with retry + rate limiting) |
-| `/api/enhance-prompt` | POST | Gemini 2.5 Flash Lite prompt enhancement |
-| `/api/generate-captions` | POST | Gemini captions per tone + platform |
-
----
-
-## What's Missing / Actual Next Steps
-
-### Must-have for a real product
-- [ ] **Product catalog DB** — tracking now uses Neon, but products are still hardcoded in `lib/mock-data.ts`.
-- [x] **Auth** — Better Auth wired with email/password + Google sign-in, protected dashboard/admin APIs, and Neon-backed auth tables.
-- [ ] **Wire Next.js → FastAPI** — the Next.js `generate-image` and `enhance-prompt` routes duplicate the FastAPI logic. Pick one and proxy to it.
-- [x] **`.env.local.example`** — root-level env example file is now included.
-
-### Nice-to-have
-- [x] **Real tracking** — `/api/track` writes sessions/events to Neon, and confirmed orders are logged server-side via `/api/webhooks/payment`.
-- [ ] **Image storage** — generated images are returned as raw bytes and not saved anywhere. Add S3/R2/Supabase Storage.
-- [ ] **Retire `lunarhack/`** — the Express prototype is superseded by the FastAPI backend.
-- [ ] **Streaming from FastAPI** — image gen response is currently blocking. Add SSE or a job-queue pattern for long generations.
-- [ ] **Deploy** — Next.js → Vercel, FastAPI → Railway / Render / Fly.io
-
----
-
-## Data Flow
-
-```
-Browser
-  └─ storefront / dashboard (Next.js)
-       ├─ /api/chat              → GPT-4o-mini (streaming) + retrieved product context (RAG)
-       ├─ /api/marketing         → OpenAI GPT-4o-mini (structured output)
-       ├─ /api/insights          → OpenAI GPT-4o-mini (streaming)
-       ├─ /api/content-variants  → OpenAI GPT-4o-mini (streaming)
-       ├─ /api/recommendations   → SQL-backed recommendation signals + RAG evidence retrieval + GPT insight synthesis
-       ├─ /api/email-campaign    → OpenAI GPT-4o-mini (streaming)
-       ├─ /api/webhooks/payment  → Secure confirmed-payment order writes
-       ├─ /api/qualify-lead      → OpenAI GPT-4o-mini + tool-calling
-       ├─ /api/generate-image    → HuggingFace FLUX.1-schnell
-       └─ /api/enhance-prompt    → Gemini 2.5 Flash Lite
-
-FastAPI backend (localhost:8000)
-  ├─ /api/generate-image    → HuggingFace FLUX.1-schnell (with retry/rate-limit)
-  ├─ /api/enhance-prompt    → Gemini 2.5 Flash Lite
-  └─ /api/generate-captions → Gemini 2.5 Flash Lite
+pnpm auth:generate
+pnpm auth:migrate
 ```
