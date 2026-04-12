@@ -14,7 +14,8 @@ const databaseUrl = process.env.DATABASE_URL?.trim()
 const sql = databaseUrl ? neon(databaseUrl) : null
 
 const STORE_DB_FAILURE_COOLDOWN_MS = 30_000
-const STORE_DB_TIMEOUT_MS = 4_000
+const STORE_DB_TIMEOUT_MS = 8_000
+const STORE_DB_SCHEMA_TIMEOUT_MS = 20_000
 
 const DEFAULT_STORE_SETTINGS: Omit<StoreSettings, "updated_at"> = {
   store_name: "SmartSouk",
@@ -149,13 +150,13 @@ function markStoreDbFailure(error: unknown, context: string) {
   storeDbUnavailableUntil = now + STORE_DB_FAILURE_COOLDOWN_MS
 }
 
-async function withStoreDbTimeout<T>(operation: Promise<T>, context: string): Promise<T> {
+async function withStoreDbTimeout<T>(operation: Promise<T>, context: string, timeoutMs = STORE_DB_TIMEOUT_MS): Promise<T> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined
 
   const timeoutPromise = new Promise<never>((_resolve, reject) => {
     timeoutHandle = setTimeout(() => {
-      reject(new Error(`[store-data] ${context} timed out after ${STORE_DB_TIMEOUT_MS}ms.`))
-    }, STORE_DB_TIMEOUT_MS)
+      reject(new Error(`[store-data] ${context} timed out after ${timeoutMs}ms.`))
+    }, timeoutMs)
   })
 
   try {
@@ -360,7 +361,7 @@ async function ensureStoreSchema() {
   }
 
   try {
-    await withStoreDbTimeout(ensureStoreSchemaPromise, "ensureStoreSchema")
+    await withStoreDbTimeout(ensureStoreSchemaPromise, "ensureStoreSchema", STORE_DB_SCHEMA_TIMEOUT_MS)
     markStoreDbRecovered()
   } catch (error) {
     markStoreDbFailure(error, "ensureStoreSchema")
