@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 const DEFAULT_SMTP_HOST = "smtp.gmail.com";
 const DEFAULT_SMTP_PORT = 465;
 const DEFAULT_SENDER_NAME = "Aurea Fragrance House";
+const CAMPAIGN_IMAGE_CID = "campaign-image@aurea";
 
 let cachedTransporter: nodemailer.Transporter | null = null;
 
@@ -17,6 +18,11 @@ export interface SendCampaignEmailResult {
   accepted: string[];
   rejected: string[];
   messageIds: string[];
+}
+
+interface ResolvedEmailImage {
+  htmlImageSrc: string;
+  attachments: NonNullable<nodemailer.SendMailOptions["attachments"]>;
 }
 
 function getRequiredEnv(name: "SMTP_USER" | "SMTP_PASSWORD"): string {
@@ -91,14 +97,91 @@ function copyToParagraphs(campaignCopy: string): string {
     .join("");
 }
 
+function extensionFromMimeType(mimeType: string): string {
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+  };
+
+  return map[mimeType.toLowerCase()] || "jpg";
+}
+
+function extensionFromUrl(urlValue: string): string {
+  try {
+    const pathname = new URL(urlValue).pathname;
+    const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
+    return match ? match[1].toLowerCase() : "jpg";
+  } catch {
+    return "jpg";
+  }
+}
+
+function resolveEmailImage(imageUrl: string): ResolvedEmailImage {
+  const trimmed = imageUrl.trim();
+  if (!trimmed) {
+    return {
+      htmlImageSrc: trimmed,
+      attachments: [],
+    };
+  }
+
+  const dataUrlMatch = trimmed.match(
+    /^data:(image\/[a-zA-Z0-9.+-]+);base64,([a-zA-Z0-9+/=\r\n]+)$/,
+  );
+
+  if (dataUrlMatch) {
+    const mimeType = dataUrlMatch[1].toLowerCase();
+    const base64Payload = dataUrlMatch[2].replace(/\s/g, "");
+    const extension = extensionFromMimeType(mimeType);
+
+    return {
+      htmlImageSrc: `cid:${CAMPAIGN_IMAGE_CID}`,
+      attachments: [
+        {
+          filename: `campaign-image.${extension}`,
+          content: Buffer.from(base64Payload, "base64"),
+          contentType: mimeType,
+          cid: CAMPAIGN_IMAGE_CID,
+          disposition: "inline",
+        },
+      ],
+    };
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    const extension = extensionFromUrl(trimmed);
+
+    return {
+      htmlImageSrc: `cid:${CAMPAIGN_IMAGE_CID}`,
+      attachments: [
+        {
+          filename: `campaign-image.${extension}`,
+          path: trimmed,
+          cid: CAMPAIGN_IMAGE_CID,
+          disposition: "inline",
+        },
+      ],
+    };
+  }
+
+  return {
+    htmlImageSrc: trimmed,
+    attachments: [],
+  };
+}
+
 export function buildLuxuryPerfumeEmailHtml(params: {
   subject: string;
   campaignCopy: string;
-  imageUrl: string;
+  imageSrc: string;
 }): string {
-  const { subject, campaignCopy, imageUrl } = params;
+  const { subject, campaignCopy, imageSrc } = params;
   const paragraphs = copyToParagraphs(campaignCopy);
-  const safeImageUrl = escapeHtml(imageUrl.trim());
+  const safeImageSrc = escapeHtml(imageSrc.trim());
   const safeSubject = escapeHtml(subject.trim());
 
   return `
@@ -146,7 +229,7 @@ export function buildLuxuryPerfumeEmailHtml(params: {
             </tr>
             <tr>
               <td style="padding:0; background:#f2e2cf;">
-                <img src="${safeImageUrl}" alt="Luxury perfume visual" width="620" style="display:block; width:100%; max-width:620px; height:auto; border:0;" />
+                <img src="${safeImageSrc}" alt="Luxury perfume visual" width="620" style="display:block; width:100%; max-width:620px; height:auto; border:0;" />
               </td>
             </tr>
             <tr>
@@ -186,10 +269,11 @@ export async function sendCampaignEmail(
   const fromAddress = process.env.SMTP_FROM_EMAIL?.trim() || smtpUser;
   const fromName = process.env.SMTP_FROM_NAME?.trim() || DEFAULT_SENDER_NAME;
   const sanitizedFromName = fromName.replace(/\"/g, "");
+  const resolvedImage = resolveEmailImage(payload.imageUrl);
   const html = buildLuxuryPerfumeEmailHtml({
     subject: payload.subject,
     campaignCopy: payload.campaignCopy,
-    imageUrl: payload.imageUrl,
+    imageSrc: resolvedImage.htmlImageSrc,
   });
 
   const accepted = new Set<string>();
@@ -203,6 +287,10 @@ export async function sendCampaignEmail(
       subject: payload.subject,
       text: payload.campaignCopy,
       html,
+      attachments:
+        resolvedImage.attachments.length > 0
+          ? resolvedImage.attachments
+          : undefined,
     });
 
     toStringArray(info.accepted).forEach((entry) => accepted.add(entry));

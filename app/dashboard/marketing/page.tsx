@@ -446,7 +446,9 @@ export default function MarketingPage() {
   // Email send state
   const [emailRecipients, setEmailRecipients] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
+  const [emailPreviewText, setEmailPreviewText] = useState("");
   const [campaignCopy, setCampaignCopy] = useState("");
+  const [isSuggestingEmail, setIsSuggestingEmail] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const updateCfg = useCallback((patch: Partial<OverlayConfig>) => {
@@ -696,6 +698,100 @@ export default function MarketingPage() {
       });
     } finally {
       setIsSendingEmail(false);
+    }
+  }
+
+  async function handleSuggestEmailDraft() {
+    if (isSuggestingEmail) {
+      return;
+    }
+
+    if (!imageUrl) {
+      toast({
+        variant: "destructive",
+        title: "Generate an image first",
+        description:
+          "We use the generated visual context to suggest better email copy.",
+      });
+      return;
+    }
+
+    setIsSuggestingEmail(true);
+
+    try {
+      const captionText = captions[0]
+        ? [captions[0].caption, captions[0].hashtags]
+            .filter(Boolean)
+            .join("\n\n")
+        : "";
+
+      const response = await fetch("/api/marketing/suggest-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          article: selectedArticle,
+          profile: { brandName, industry, visualStyle, audience },
+          imagePrompt: lastGeneratedPrompt || roughPrompt,
+          captionText,
+        }),
+      });
+
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        details?: string;
+        provider?: string;
+        warning?: string;
+        subject?: string;
+        preview_text?: string;
+        campaign_copy?: string;
+        cta?: string;
+      };
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || result.details || "Unable to suggest email draft.",
+        );
+      }
+
+      const nextSubject = (result.subject || "").trim();
+      const nextPreview = (result.preview_text || "").trim();
+      const nextBody = (result.campaign_copy || "").trim();
+      const nextCta = (result.cta || "").trim();
+
+      if (nextSubject) {
+        setEmailSubject(nextSubject);
+      }
+
+      if (nextPreview) {
+        setEmailPreviewText(nextPreview);
+      }
+
+      const mergedCopy = [nextBody, nextCta ? `CTA: ${nextCta}` : ""]
+        .filter(Boolean)
+        .join("\n\n");
+
+      if (mergedCopy) {
+        setCampaignCopy(mergedCopy);
+      }
+
+      toast({
+        title: "Email draft ready",
+        description:
+          result.warning ||
+          `Draft generated using ${(result.provider || "ai").toString()} based on your image context.`,
+      });
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Suggestion failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Unexpected error while generating email suggestion.",
+      });
+    } finally {
+      setIsSuggestingEmail(false);
     }
   }
 
@@ -1321,6 +1417,20 @@ export default function MarketingPage() {
               </p>
             </div>
 
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                Let AI suggest a high-converting subject and body from your
+                image context.
+              </p>
+              <Button
+                variant="outline"
+                onClick={handleSuggestEmailDraft}
+                disabled={isSuggestingEmail || !imageUrl}
+              >
+                {isSuggestingEmail ? "Suggesting…" : "Suggest with AI"}
+              </Button>
+            </div>
+
             <div className="space-y-1.5">
               <Label>Recipient emails</Label>
               <Textarea
@@ -1342,6 +1452,11 @@ export default function MarketingPage() {
                   onChange={(e) => setEmailSubject(e.target.value)}
                   placeholder="A new signature scent moment"
                 />
+                {emailPreviewText && (
+                  <p className="text-xs text-muted-foreground">
+                    Preview text: {emailPreviewText}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
