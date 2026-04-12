@@ -35,6 +35,7 @@ const resend = resendApiKey ? new Resend(resendApiKey) : null
 export const auth = betterAuth({
   appName: "Aurea",
   baseURL: getBaseURL(),
+  trustHost: true,
   secret,
   trustedOrigins: [getBaseURL()].filter(Boolean),
   database: pool,

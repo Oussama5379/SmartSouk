@@ -65,7 +65,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!session) return
-    fetch("/api/auth/is-admin")
+    fetch("/api/auth/is-admin", { cache: "no-store" })
       .then((r) => r.json())
       .then((data: { isAdmin: boolean }) => setIsAdmin(data.isAdmin))
       .catch(() => setIsAdmin(false))
