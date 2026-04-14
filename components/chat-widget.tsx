@@ -168,28 +168,28 @@ export function ChatWidget({
       <Button
         onClick={toggleChat}
         size="lg"
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:shadow-xl"
+        className="fixed bottom-4 right-4 z-50 h-14 w-14 rounded-none border-2 border-black bg-black text-white shadow-lg transition hover:bg-accent hover:text-white sm:bottom-6 sm:right-6"
         title="Open Sales Assistant"
       >
         <MessageCircle className="h-6 w-6" />
       </Button>
 
       {isOpen && (
-        <Card className="fixed bottom-24 right-6 w-96 shadow-2xl">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <Card className="fixed inset-x-2 bottom-2 top-2 z-50 flex max-h-[calc(100dvh-1rem)] w-auto flex-col rounded-none border-2 border-black shadow-2xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:top-auto sm:max-h-[80dvh] sm:w-[24rem]">
+          <CardHeader className="flex flex-row items-center justify-between border-b-2 border-black bg-muted/30 pb-3">
             <div>
               <h3 className="font-semibold flex items-center gap-2">
-                <Bot className="h-4 w-4 text-blue-600" />
+                <Bot className="h-4 w-4 text-accent" />
                 Sales Intelligence Agent
               </h3>
               <p className="text-xs text-muted-foreground">Online • Ready to help</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={toggleChat} className="h-6 w-6 p-0">
+            <Button variant="ghost" size="sm" onClick={toggleChat} className="h-8 w-8 p-0">
               <X className="h-4 w-4" />
             </Button>
           </CardHeader>
 
-          <ScrollArea className="h-96 w-full">
+          <ScrollArea className="min-h-0 flex-1 w-full">
             <div ref={scrollRef} className="flex flex-col gap-3 p-4">
               {messages.map((message) => (
                 <div
@@ -197,21 +197,21 @@ export function ChatWidget({
                   className={`flex gap-2 ${message.role === "assistant" ? "justify-start" : "justify-end"}`}
                 >
                   {message.role === "assistant" && (
-                    <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                      <Bot className="h-4 w-4 text-blue-600" />
+                    <div className="h-6 w-6 rounded-none border border-black bg-muted flex items-center justify-center flex-shrink-0">
+                      <Bot className="h-4 w-4 text-accent" />
                     </div>
                   )}
                   <div
-                    className={`rounded-lg px-3 py-2 max-w-xs text-sm ${
+                    className={`max-w-[85%] border border-black px-3 py-2 text-sm ${
                       message.role === "assistant"
-                        ? "bg-gray-100 text-gray-900"
-                        : "bg-blue-600 text-white"
+                        ? "bg-muted text-foreground"
+                        : "bg-black text-white"
                     }`}
                   >
                     {getMessageText(message)}
                   </div>
                   {message.role === "user" && (
-                    <div className="h-6 w-6 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                    <div className="h-6 w-6 rounded-none border border-black bg-black flex items-center justify-center flex-shrink-0">
                       <User className="h-4 w-4 text-white" />
                     </div>
                   )}
@@ -219,10 +219,10 @@ export function ChatWidget({
               ))}
               {isLoading && messages[messages.length - 1]?.role === "user" && (
                 <div className="flex gap-2 justify-start">
-                  <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <Bot className="h-4 w-4 text-blue-600" />
+                  <div className="h-6 w-6 rounded-none border border-black bg-muted flex items-center justify-center flex-shrink-0">
+                    <Bot className="h-4 w-4 text-accent" />
                   </div>
-                  <div className="rounded-lg px-3 py-3 max-w-xs bg-gray-100 flex items-center gap-1.5">
+                  <div className="max-w-[85%] border border-black bg-muted px-3 py-3 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                     <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                     <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -232,7 +232,7 @@ export function ChatWidget({
             </div>
           </ScrollArea>
 
-          <CardFooter className="border-t p-3">
+          <CardFooter className="border-t-2 border-black p-3">
             <form
               onSubmit={(event) => {
                 event.preventDefault()
@@ -249,10 +249,15 @@ export function ChatWidget({
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Type your message..."
-                className="flex-1 text-sm"
+                className="flex-1 rounded-none border-2 border-black text-sm"
                 disabled={isLoading}
               />
-              <Button type="submit" size="icon" disabled={isLoading || !input.trim()}>
+              <Button
+                type="submit"
+                size="icon"
+                className="rounded-none border-2 border-black bg-black text-white hover:bg-accent"
+                disabled={isLoading || !input.trim()}
+              >
                 <Send className="h-4 w-4" />
               </Button>
             </form>

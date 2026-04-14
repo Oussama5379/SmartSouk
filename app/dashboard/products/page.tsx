@@ -466,7 +466,7 @@ export default function ProductsPage() {
               </div>
             )}
 
-            <Button type="submit" disabled={creating}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={creating}>
               {creating ? "Adding..." : "Add Article"}
             </Button>
           </form>
@@ -589,11 +589,11 @@ export default function ProductsPage() {
                 </div>
               )}
 
-              <div className="flex items-center gap-3">
-                <Button type="submit" disabled={updating}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Button type="submit" className="w-full sm:w-auto" disabled={updating}>
                   {updating ? "Saving..." : "Save Changes"}
                 </Button>
-                <Button type="button" variant="outline" onClick={handleCancelEdit}>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={handleCancelEdit}>
                   Cancel
                 </Button>
               </div>
@@ -637,22 +637,13 @@ export default function ProductsPage() {
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading products...</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="space-y-3 md:hidden">
                 {sortedProducts.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="h-12 w-12 rounded-md overflow-hidden bg-muted shrink-0">
+                  <Card key={`mobile-${product.id}`} className="border">
+                    <CardContent className="space-y-4 pt-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-14 w-14 rounded-md overflow-hidden bg-muted shrink-0">
                           {product.image ? (
                             <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
                           ) : (
@@ -661,34 +652,32 @@ export default function ProductsPage() {
                             </div>
                           )}
                         </div>
-                        <div>
-                          <p className="font-medium">{product.name}</p>
-                          <p className="text-sm text-muted-foreground line-clamp-1">{product.description}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium line-clamp-1">{product.name}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2">{product.description}</p>
                         </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{categoryLabels[product.category]}</Badge>
-                    </TableCell>
-                    <TableCell className="font-medium">{product.price_tnd} TND</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={stockLabels[product.stock_status].variant}
-                        className={cn(
-                          product.stock_status === "in_stock" &&
-                            "bg-green-100 text-green-800 hover:bg-green-100",
-                          product.stock_status === "low_stock" &&
-                            "bg-amber-100 text-amber-800 hover:bg-amber-100"
-                        )}
-                      >
-                        {stockLabels[product.stock_status].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{categoryLabels[product.category]}</Badge>
+                        <Badge
+                          variant={stockLabels[product.stock_status].variant}
+                          className={cn(
+                            product.stock_status === "in_stock" &&
+                              "bg-green-100 text-green-800 hover:bg-green-100",
+                            product.stock_status === "low_stock" &&
+                              "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                          )}
+                        >
+                          {stockLabels[product.stock_status].label}
+                        </Badge>
+                        <span className="ml-auto text-sm font-medium">{product.price_tnd} TND</span>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row">
                         <Button
                           variant="outline"
-                          size="sm"
+                          className="w-full"
                           onClick={() => handleStartEdit(product)}
                           disabled={updating || creating}
                         >
@@ -697,7 +686,7 @@ export default function ProductsPage() {
                         </Button>
                         <Button
                           variant="outline"
-                          size="sm"
+                          className="w-full"
                           onClick={() => void handleDeleteProduct(product.id)}
                           disabled={deletingProductId === product.id}
                         >
@@ -705,11 +694,87 @@ export default function ProductsPage() {
                           {deletingProductId === product.id ? "Removing..." : "Remove"}
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
+                    </CardContent>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              <div className="hidden md:block">
+                <Table className="min-w-[760px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedProducts.map((product) => (
+                      <TableRow key={product.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="h-12 w-12 rounded-md overflow-hidden bg-muted shrink-0">
+                              {product.image ? (
+                                <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
+                                  <Upload className="h-4 w-4" />
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium">{product.name}</p>
+                              <p className="text-sm text-muted-foreground line-clamp-1">{product.description}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{categoryLabels[product.category]}</Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{product.price_tnd} TND</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={stockLabels[product.stock_status].variant}
+                            className={cn(
+                              product.stock_status === "in_stock" &&
+                                "bg-green-100 text-green-800 hover:bg-green-100",
+                              product.stock_status === "low_stock" &&
+                                "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                            )}
+                          >
+                            {stockLabels[product.stock_status].label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleStartEdit(product)}
+                              disabled={updating || creating}
+                            >
+                              <Edit3 className="h-3.5 w-3.5 mr-1" />
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleDeleteProduct(product.id)}
+                              disabled={deletingProductId === product.id}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              {deletingProductId === product.id ? "Removing..." : "Remove"}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

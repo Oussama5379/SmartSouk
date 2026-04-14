@@ -10,12 +10,14 @@ import {
   Lightbulb,
   Loader2,
   LogOut,
+  Menu,
   Megaphone,
   Package,
   Settings,
 } from "lucide-react"
 import { Toaster } from "@/components/ui/toaster"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { signOut, useSession } from "@/lib/auth-client"
 import { isAdminDashboardRoute } from "@/lib/admin-routes"
 import { readClientCache, writeClientCache } from "@/lib/client-cache"
@@ -52,6 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [siteIconUrl, setSiteIconUrl] = useState(cachedSnapshot?.siteIconUrl ?? "")
   const [signingOut, setSigningOut] = useState(false)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(cachedSnapshot?.isAdmin ?? null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const callbackURL = useMemo(() => {
     if (pathname?.startsWith("/dashboard")) return pathname
@@ -142,8 +145,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-card">
+    <div className="min-h-screen bg-background">
+      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r bg-card md:block">
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center border-b px-6">
             <Link href="/" className="flex items-center gap-2">
@@ -202,9 +205,85 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="ml-64 flex-1">
-        <div className="p-8">{children}</div>
-      </main>
+      <div className="md:ml-64">
+        <header className="sticky top-0 z-30 border-b bg-card md:hidden">
+          <div className="flex h-16 items-center justify-between px-4">
+            <Link href="/" className="flex min-w-0 items-center gap-2">
+              {siteIconUrl ? (
+                <img src={siteIconUrl} alt="Store Icon" className="h-8 w-8 rounded-lg object-contain" />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
+                  {storeName.charAt(0).toUpperCase() || "S"}
+                </div>
+              )}
+              <span className="truncate text-base font-semibold">{storeName}</span>
+            </Link>
+
+            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="Open dashboard menu">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[86vw] max-w-[18rem] p-0">
+                <SheetTitle className="sr-only">Dashboard Menu</SheetTitle>
+                <div className="flex h-full flex-col">
+                  <div className="border-b p-4">
+                    <p className="truncate text-sm font-semibold">{displayName}</p>
+                  </div>
+
+                  <nav className="flex-1 space-y-1 p-4">
+                    {navigation.map((item) => {
+                      const isActive = pathname === item.href
+                      return (
+                        <Link
+                          key={item.name}
+                          href={item.href}
+                          prefetch
+                          onClick={() => setMobileNavOpen(false)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                            isActive
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                          )}
+                        >
+                          <item.icon className="h-5 w-5" />
+                          {item.name}
+                        </Link>
+                      )
+                    })}
+                  </nav>
+
+                  <div className="space-y-3 border-t p-4">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => void handleSignOut()}
+                      disabled={signingOut}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      {signingOut ? "Signing out..." : "Sign out"}
+                    </Button>
+                    <Link
+                      href="/"
+                      onClick={() => setMobileNavOpen(false)}
+                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      <Home className="h-4 w-4" />
+                      Back to Store
+                    </Link>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </header>
+
+        <main>
+          <div className="p-4 sm:p-6 md:p-8">{children}</div>
+        </main>
+      </div>
 
       <Toaster />
     </div>

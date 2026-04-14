@@ -1,16 +1,19 @@
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { getStoreSettings } from "@/lib/store-data"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+})
 
 const fallbackMetadata: Metadata = {
-  title: "SmartSouk - Authentic Tunisian Craftsmanship",
+  title: "Aurea - Intelligent Fragrance Commerce",
   description:
-    "Discover handcrafted ceramics, woven rugs, and organic oils from Tunisia. Powered by AI for smart shopping and marketing.",
+    "A high-clarity commerce platform for premium fragrance products, campaign automation, and customer insights.",
   generator: "v0.app",
   icons: {
     icon: [
@@ -46,7 +49,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased">
+      <body className={`${inter.variable} swiss-noise font-sans antialiased`}>
         {children}
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
