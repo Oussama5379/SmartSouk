@@ -54,7 +54,7 @@ function clamp(value: string, max: number): string {
 }
 
 function buildPrompt(input: SuggestEmailRequestBody): string {
-  const brandName = normalize(input.profile?.brandName) || "Aurea";
+  const brandName = normalize(input.profile?.brandName) || "SmartSouk";
   const industry = normalize(input.profile?.industry) || "premium retail";
   const visualStyle =
     normalize(input.profile?.visualStyle) || "luxury editorial";
@@ -92,7 +92,7 @@ Requirements:
 function buildFallbackSuggestion(
   input: SuggestEmailRequestBody,
 ): SuggestEmailDraft {
-  const brandName = normalize(input.profile?.brandName) || "Aurea";
+  const brandName = normalize(input.profile?.brandName) || "SmartSouk";
   const audience = normalize(input.profile?.audience) || "fragrance lovers";
   const angleTitle = normalize(input.article?.title) || "A New Signature Scent";
   const angleSummary =

@@ -78,7 +78,7 @@ function LoginForm() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
-          <CardDescription>Access your Aurea dashboard.</CardDescription>
+          <CardDescription>Access your SmartSouk dashboard.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}

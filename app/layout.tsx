@@ -11,17 +11,13 @@ const inter = Inter({
 })
 
 const fallbackMetadata: Metadata = {
-  title: "Aurea - Intelligent Fragrance Commerce",
+  title: "SmartSouk - AI-Powered Smart Business Suite",
   description:
-    "A high-clarity commerce platform for premium fragrance products, campaign automation, and customer insights.",
-  generator: "v0.app",
+    "SmartSouk helps SMEs with analytics, sales intelligence, and AI-powered marketing workflows.",
+  generator: "SmartSouk",
   icons: {
-    icon: [
-      { url: "/icon-light-32x32.png", media: "(prefers-color-scheme: light)" },
-      { url: "/icon-dark-32x32.png", media: "(prefers-color-scheme: dark)" },
-      { url: "/icon.svg", type: "image/svg+xml" },
-    ],
-    apple: "/apple-icon.png",
+    icon: [{ url: "https://cdn-icons-png.flaticon.com/512/7511/7511667.png" }],
+    apple: "https://cdn-icons-png.flaticon.com/512/7511/7511667.png",
   },
 }
 

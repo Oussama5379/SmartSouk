@@ -17,7 +17,7 @@ function parseNonEmptyString(value: unknown): string | undefined {
 
 function normalizePagePath(value: string): string {
   try {
-    const parsed = new URL(value, "https://aurea.local")
+    const parsed = new URL(value, "https://smartsouk.local")
     return parsed.pathname || "/"
   } catch {
     const [withoutQuery] = value.split("?")
@@ -27,7 +27,7 @@ function normalizePagePath(value: string): string {
 
 function parseUtmFieldsFromUrl(value: string): Partial<TrackEventMetadata> {
   try {
-    const parsed = new URL(value, "https://aurea.local")
+    const parsed = new URL(value, "https://smartsouk.local")
     const source = parsed.searchParams.get("utm_source")?.trim()
     const medium = parsed.searchParams.get("utm_medium")?.trim()
     const campaign = parsed.searchParams.get("utm_campaign")?.trim()

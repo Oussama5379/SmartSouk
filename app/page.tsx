@@ -55,12 +55,12 @@ interface FAQItem {
 }
 
 const fallbackSettings: StoreSettings = {
-  store_name: "Aurea",
+  store_name: "SmartSouk",
   store_description:
-    "A curated fragrance house where artisanal sourcing meets intelligent commerce automation.",
-  contact_email: "contact@aurea.house",
+    "Discover handcrafted ceramics, woven rugs, and organic oils from Tunisia. Every piece tells a story of tradition.",
+  contact_email: "contact@smartsouk.tn",
   hero_image_url: "",
-  site_icon_url: "",
+  site_icon_url: "https://cdn-icons-png.flaticon.com/512/7511/7511667.png",
   feature_one_title: "Ingredient Integrity",
   feature_one_description: "Transparent sourcing and formula traceability across every SKU.",
   feature_two_title: "Global Distribution",
@@ -1030,7 +1030,7 @@ export default function StorefrontPage() {
           <div className="grid gap-8 border-4 border-black bg-background p-6 lg:grid-cols-3 lg:p-8">
             <div>
               <p className="swiss-section-label">{settings.store_name} Inc.</p>
-              <h2 className="mt-3 text-3xl font-black uppercase tracking-tight">Aurea Platform</h2>
+              <h2 className="mt-3 text-3xl font-black uppercase tracking-tight">SmartSouk Platform</h2>
               <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
                 Structured commerce for premium fragrance teams. Objective design, measurable outcomes.
               </p>
